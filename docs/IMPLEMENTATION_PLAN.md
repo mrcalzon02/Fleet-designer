@@ -20,7 +20,7 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, and queue controls.
+Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, and componentized cockpit panels.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
@@ -41,6 +41,7 @@ Implemented core work:
 - Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
+- Cockpit componentization: `App.jsx` now orchestrates state and handlers while focused panel components own presentation.
 
 Recently fixed:
 
@@ -53,6 +54,7 @@ Recently fixed:
 - Added partial sale and partial delivery simulation functions with proportional payouts.
 - Added production run priority, pause/resume, cancel, material salvage, and cash salvage.
 - Replaced unrealistic per-run capacity application with a single priority-sorted factory capacity allocator.
+- Extracted cockpit UI into `CompanyHeader`, `FinancialOverview`, `ContractBoard`, `ProductionPanels`, `InventoryWarehousePanels`, `OperationsPanels`, and `QuantityControl`.
 
 Known limitations to fix before calling Phase 1 complete:
 
@@ -61,7 +63,7 @@ Known limitations to fix before calling Phase 1 complete:
 - Supply restocking is automatic and not yet tied to supplier contracts or commodity pricing.
 - Research engineer assignment is represented by data but not yet controllable in the UI.
 - Warehouse capacity is checked at queue time, but there is not yet a cost for storage, warehousing upgrades, or stock aging.
-- `App.jsx` is now intentionally functional but too large; the next efficiency pass should split panels into focused components to reduce code overhead and keep future changes safer.
+- The simulation file is now the next place to watch for growth; future mechanics should be split by domain when it becomes harder to read.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
 
