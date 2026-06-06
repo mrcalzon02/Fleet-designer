@@ -1,3 +1,5 @@
+import { progressResearchProjects } from './researchSimulation.js';
+
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const PRIORITY_ORDER = { high: 0, normal: 1, low: 2 };
@@ -404,20 +406,6 @@ function resolveContractDeadlines(next) {
   }
 }
 
-function progressResearch(next) {
-  for (const project of next.research) {
-    if (project.status !== 'active') continue;
-    project.progress += 8 + project.engineers * 6;
-    if (project.progress >= project.required) {
-      project.progress = project.required;
-      project.status = 'complete';
-      if (project.discipline === 'supply chain') next.company.burnRate = Math.round(next.company.burnRate * 0.94);
-      if (project.discipline === 'manufacturing') next.company.factoryCapacity += 1;
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: Research complete - ${project.name}. ${project.effect}.`);
-    }
-  }
-}
-
 function restockSpotMarket(next) {
   next.inventory.rawOre += 4;
   next.inventory.volatiles += 2;
@@ -462,7 +450,7 @@ export function advanceCycle(state) {
   next.company.cash -= next.company.burnRate;
 
   const capacityUsed = allocateFactoryCapacity(next);
-  progressResearch(next);
+  progressResearchProjects(next);
   resolveContractDeadlines(next);
   restockSpotMarket(next);
 
