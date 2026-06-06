@@ -24,11 +24,28 @@ const departmentCards = [
   { title: 'Vessel Builder', icon: Ship, note: 'Vessel designs are economic products.' },
 ];
 
+function QuantityControl({ label, value, min = 1, max = 999, onChange }) {
+  return (
+    <label className="quantity-control">
+      <span>{label}</span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Math.max(min, Math.min(max, Number.parseInt(event.target.value || min, 10))))}
+      />
+    </label>
+  );
+}
+
 function App() {
   const [game, setGame] = useState(initialGameState);
   const [cashHistory, setCashHistory] = useState([
     { cycle: `C${initialGameState.company.cycle}`, cash: initialGameState.company.cash / 1000000 },
   ]);
+  const [productionQuantities, setProductionQuantities] = useState({});
+  const [lotQuantities, setLotQuantities] = useState({});
 
   const acceptedContracts = game.contracts.filter((contract) => contract.status === 'accepted');
   const openContracts = game.contracts.filter((contract) => contract.status === 'open');
@@ -43,6 +60,22 @@ function App() {
   const warehouseUsed = useMemo(() => {
     return game.finishedGoods.reduce((sum, lot) => sum + lot.availableQuantity, 0);
   }, [game.finishedGoods]);
+
+  function getProductionQuantity(designId) {
+    return productionQuantities[designId] ?? 1;
+  }
+
+  function setProductionQuantity(designId, value) {
+    setProductionQuantities((current) => ({ ...current, [designId]: value }));
+  }
+
+  function getLotQuantity(lotId, fallback) {
+    return Math.min(lotQuantities[lotId] ?? fallback ?? 1, fallback ?? 1);
+  }
+
+  function setLotQuantity(lotId, value) {
+    setLotQuantities((current) => ({ ...current, [lotId]: value }));
+  }
 
   function applyAction(action) {
     setGame((current) => action(current));
@@ -66,7 +99,7 @@ function App() {
           <p className="eyebrow">PHASE 1 PLAYABLE MANAGEMENT LOOP</p>
           <h1>Fleet Designer</h1>
           <p className="hero-copy">
-            Your aerospace company now has a live operating loop: accept contracts, queue production, move completed batches into finished-goods stock, sell market lots, deliver reserved contract lots, and try not to end up on the intergalactic breadline.
+            Your aerospace company now supports quantity-based production, finished-goods stock lots, partial market sales, partial contract deliveries, and proportional penalties when a client only receives part of an order before the deadline.
           </p>
           <div className="command-row">
             <button className="primary-command" onClick={handleAdvanceCycle} disabled={game.company.status === 'bankrupt'}>
@@ -143,11 +176,13 @@ function App() {
               const assignedDesign = game.designs.find((design) => design.id === contract.assignedDesignId);
               const linkedRun = game.productionRuns.find((run) => run.id === contract.productionRunId);
               const stockLot = game.finishedGoods.find((lot) => lot.id === contract.stockLotId || lot.contractId === contract.id);
+              const remaining = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
+              const deliverQty = stockLot ? getLotQuantity(`contract-${stockLot.id}`, Math.min(stockLot.availableQuantity, remaining)) : 1;
               return (
                 <div className={`data-card ${contract.status}`} key={contract.id}>
                   <strong>{contract.title}</strong>
                   <small>{contract.client} // {contract.category}</small>
-                  <p>Need {contract.quantity} x {contract.requiredType}. Deadline C{contract.deadline}. Reward {formatCredits(contract.reward)}.</p>
+                  <p>Need {contract.quantity} x {contract.requiredType}. Delivered {contract.deliveredQuantity ?? 0}/{contract.quantity}. Deadline C{contract.deadline}. Reward {formatCredits(contract.reward)}.</p>
                   {assignedDesign && <p>Assigned design: {assignedDesign.name}</p>}
                   {linkedRun && <p>Production run: {linkedRun.status} // {linkedRun.progress}/{linkedRun.required}</p>}
                   {stockLot && <p>Reserved stock: {stockLot.status} // QA {stockLot.qaResult} // {stockLot.availableQuantity} available</p>}
@@ -162,15 +197,23 @@ function App() {
                           Use {design.name}
                         </button>
                       ))}
-                    {contract.status === 'accepted' && !contract.productionRunId && (
+                    {contract.status === 'accepted' && remaining > 0 && (
                       <button onClick={() => applyAction((state) => queueContractProduction(state, contract.id))}>
-                        Queue Contract Run
+                        Queue Remaining Run
                       </button>
                     )}
-                    {contract.status === 'accepted' && stockLot?.status === 'reserved-contract' && (
-                      <button onClick={() => applyAction((state) => deliverContractStock(state, contract.id))}>
-                        Deliver Stock
-                      </button>
+                    {contract.status === 'accepted' && stockLot?.status === 'reserved-contract' && remaining > 0 && (
+                      <>
+                        <QuantityControl
+                          label="Deliver"
+                          value={deliverQty}
+                          max={Math.min(stockLot.availableQuantity, remaining)}
+                          onChange={(value) => setLotQuantity(`contract-${stockLot.id}`, value)}
+                        />
+                        <button onClick={() => applyAction((state) => deliverContractStock(state, contract.id, deliverQty))}>
+                          Deliver Stock
+                        </button>
+                      </>
                     )}
                   </div>
                   <em>{contract.status}</em>
@@ -183,22 +226,31 @@ function App() {
         <article className="console-panel tall-panel">
           <div className="panel-heading">
             <span>Design Catalog</span>
-            <small>market production or rights</small>
+            <small>quantity production</small>
           </div>
           <div className="stack-list">
-            {game.designs.map((design) => (
-              <div className="data-card" key={design.id}>
-                <strong>{design.name}</strong>
-                <small>{design.type} // {design.rights}</small>
-                <p>Quality {design.quality}. Reliability {design.reliability}. Sale {formatCredits(design.salePrice)}.</p>
-                <div className="button-row">
-                  <button onClick={() => applyAction((state) => queueProduction(state, design.id, 1, 'market sale'))}>Produce for Market</button>
-                  <button onClick={() => applyAction((state) => listDesignRights(state, design.id))} disabled={design.rights !== 'owned' || design.marketListed}>
-                    List Rights
-                  </button>
+            {game.designs.map((design) => {
+              const quantity = getProductionQuantity(design.id);
+              return (
+                <div className="data-card" key={design.id}>
+                  <strong>{design.name}</strong>
+                  <small>{design.type} // {design.rights}</small>
+                  <p>Quality {design.quality}. Reliability {design.reliability}. Sale {formatCredits(design.salePrice)}.</p>
+                  <div className="button-row">
+                    <QuantityControl
+                      label="Build"
+                      value={quantity}
+                      max={25}
+                      onChange={(value) => setProductionQuantity(design.id, value)}
+                    />
+                    <button onClick={() => applyAction((state) => queueProduction(state, design.id, quantity, 'market sale'))}>Produce for Market</button>
+                    <button onClick={() => applyAction((state) => listDesignRights(state, design.id))} disabled={design.rights !== 'owned' || design.marketListed}>
+                      List Rights
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </article>
 
@@ -242,25 +294,44 @@ function App() {
           </div>
           <div className="stack-list">
             {game.finishedGoods.length === 0 && <p>No finished goods in storage.</p>}
-            {game.finishedGoods.map((lot) => (
-              <div className={`data-card ${lot.status}`} key={lot.id}>
-                <strong>{lot.designName}</strong>
-                <small>{lot.type} // {lot.status} // QA {lot.qaResult}</small>
-                <p>Lot {lot.id}. Quantity {lot.availableQuantity}/{lot.quantity}. Created C{lot.createdCycle}.</p>
-                <div className="button-row">
-                  {lot.status === 'available-market' && (
-                    <button onClick={() => applyAction((state) => sellFinishedGood(state, lot.id))}>
-                      Sell Lot
-                    </button>
-                  )}
-                  {lot.status === 'reserved-contract' && (
-                    <button onClick={() => applyAction((state) => deliverContractStock(state, lot.contractId))}>
-                      Deliver Contract Lot
-                    </button>
-                  )}
+            {game.finishedGoods.map((lot) => {
+              const lotQty = getLotQuantity(lot.id, lot.availableQuantity || 1);
+              return (
+                <div className={`data-card ${lot.status}`} key={lot.id}>
+                  <strong>{lot.designName}</strong>
+                  <small>{lot.type} // {lot.status} // QA {lot.qaResult}</small>
+                  <p>Lot {lot.id}. Available {lot.availableQuantity}/{lot.quantity}. Sold {lot.soldQuantity ?? 0}. Delivered {lot.deliveredQuantity ?? 0}. Created C{lot.createdCycle}.</p>
+                  <div className="button-row">
+                    {lot.status === 'available-market' && lot.availableQuantity > 0 && (
+                      <>
+                        <QuantityControl
+                          label="Sell"
+                          value={lotQty}
+                          max={lot.availableQuantity}
+                          onChange={(value) => setLotQuantity(lot.id, value)}
+                        />
+                        <button onClick={() => applyAction((state) => sellFinishedGood(state, lot.id, lotQty))}>
+                          Sell Stock
+                        </button>
+                      </>
+                    )}
+                    {lot.status === 'reserved-contract' && lot.availableQuantity > 0 && (
+                      <>
+                        <QuantityControl
+                          label="Deliver"
+                          value={lotQty}
+                          max={lot.availableQuantity}
+                          onChange={(value) => setLotQuantity(lot.id, value)}
+                        />
+                        <button onClick={() => applyAction((state) => deliverContractStock(state, lot.contractId, lotQty))}>
+                          Deliver Contract Stock
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </article>
       </section>
@@ -320,9 +391,9 @@ function App() {
             <small>phase 2 candidates</small>
           </div>
           <div className="tag-row large-tags">
-            <span><Scale size={16} /> Finished goods now exist; next step is partial lot handling, scrapping, and priority production.</span>
+            <span><Scale size={16} /> Quantity controls and partial lots now exist; next step is priority production, canceling, and stock reservation.</span>
             <span>Engineer assignment controls should modify research speed.</span>
-            <span>Production should support exact quantities, priorities, and private/internal runs.</span>
+            <span>Supply should move from automatic restocking into supplier contracts and commodity pricing.</span>
             <span>Design editor output should create new real designs rather than fixed starter designs.</span>
           </div>
         </article>
