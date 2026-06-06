@@ -20,7 +20,7 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with separated production, stock, sales, and delivery.
+Status: playable pass implemented with quantity production, partial stock handling, and separated production, stock, sales, and delivery.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
@@ -30,9 +30,12 @@ Implemented core work:
 - Turn advancement: burn rate, research progress, production progress, supply restock, contract deadline checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
 - Contract-specific production: accepted contracts now require their own queued production run.
+- Quantity production: market production can now be queued in variable quantities from the cockpit UI.
 - Finished goods warehouse: completed production now creates stock lots rather than immediately paying out.
-- Market sales: market stock lots can be sold manually after production completes.
-- Contract delivery: reserved contract stock lots can be delivered manually after production completes.
+- Market sales: market stock lots can be sold manually after production completes, including partial lot sales.
+- Contract delivery: reserved contract stock lots can be delivered manually after production completes, including partial contract delivery.
+- Contract progress tracking: contracts now track delivered quantity and earned reward.
+- Partial failure logic: late contracts calculate reduced penalties based on partial completion.
 - Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
@@ -44,11 +47,13 @@ Recently fixed:
 - Added UI controls for explicitly queuing contract runs after accepting a contract.
 - Added `finishedGoods` stock lots with QA result, source run id, quantity, status, created cycle, and contract reservation data.
 - Added UI controls for selling market lots and delivering reserved contract lots.
+- Added cockpit quantity inputs for market production, market stock sale, and contract stock delivery.
+- Added partial sale and partial delivery simulation functions with proportional payouts.
 
 Known limitations to fix before calling Phase 1 complete:
 
-- Finished goods lots are all-or-nothing; partial sale, partial delivery, and split lots are not supported yet.
-- Production quantity input is fixed at one unit for market production from the UI.
+- Stock lots can be partially consumed but not manually split, merged, scrapped, inspected, or reclassified.
+- Contract production still auto-builds the remaining needed amount rather than letting the player choose overproduction or staged batches.
 - Supply restocking is automatic and not yet tied to supplier contracts or commodity pricing.
 - Research engineer assignment is represented by data but not yet controllable in the UI.
 - Contract runs cannot yet be reprioritized, canceled, split, or delayed deliberately.
