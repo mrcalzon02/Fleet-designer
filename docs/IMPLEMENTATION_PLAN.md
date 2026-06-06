@@ -20,19 +20,20 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented and contract-production separation added.
+Status: playable pass implemented with separated production, stock, sales, and delivery.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
 Implemented core work:
 
 - Company state: cash, reputation, cycle, burn rate, bankruptcy.
-- Turn advancement: burn rate, research progress, production progress, supply restock, contract checks.
+- Turn advancement: burn rate, research progress, production progress, supply restock, contract deadline checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
 - Contract-specific production: accepted contracts now require their own queued production run.
-- Market production: market runs pay market revenue when completed.
-- Contract delivery: contract runs pay only when delivered against the accepted contract.
-- Defect handling: defective market batches receive reduced sale revenue; defective contract batches receive reduced contract payout.
+- Finished goods warehouse: completed production now creates stock lots rather than immediately paying out.
+- Market sales: market stock lots can be sold manually after production completes.
+- Contract delivery: reserved contract stock lots can be delivered manually after production completes.
+- Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
 
@@ -41,14 +42,17 @@ Recently fixed:
 - Removed the early double-pay behavior where a completed production run could pay market revenue and then also satisfy a contract payout.
 - Added `revenueMode` and `contractId` to production runs so market, contract, and future internal production can be separated cleanly.
 - Added UI controls for explicitly queuing contract runs after accepting a contract.
+- Added `finishedGoods` stock lots with QA result, source run id, quantity, status, created cycle, and contract reservation data.
+- Added UI controls for selling market lots and delivering reserved contract lots.
 
 Known limitations to fix before calling Phase 1 complete:
 
-- Finished products are not yet tracked as warehouse stock objects; completion immediately resolves revenue or delivery.
+- Finished goods lots are all-or-nothing; partial sale, partial delivery, and split lots are not supported yet.
 - Production quantity input is fixed at one unit for market production from the UI.
 - Supply restocking is automatic and not yet tied to supplier contracts or commodity pricing.
 - Research engineer assignment is represented by data but not yet controllable in the UI.
 - Contract runs cannot yet be reprioritized, canceled, split, or delayed deliberately.
+- Warehouse capacity is checked at queue time, but there is not yet a cost for storage, warehousing upgrades, or stock aging.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
 
