@@ -10,6 +10,12 @@ export function formatCredits(amount) {
   return currency(amount);
 }
 
+function normalizeQuantity(value, fallback = 1) {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) return fallback;
+  return Math.max(1, parsed);
+}
+
 function canAffordBill(inventory, bill, quantity = 1) {
   return Object.entries(bill).every(([key, value]) => (inventory[key] ?? 0) >= value * quantity);
 }
@@ -21,18 +27,19 @@ function spendBill(inventory, bill, quantity = 1) {
 }
 
 function buildProductionRun(design, quantity, purpose, options = {}) {
+  const normalizedQuantity = normalizeQuantity(quantity);
   const complexity = design.type === 'vessel' ? 4 : design.type === 'module' ? 3 : 2;
   return {
     id: `run-${Date.now()}-${Math.round(Math.random() * 10000)}`,
     designId: design.id,
     designName: design.name,
     type: design.type,
-    quantity,
+    quantity: normalizedQuantity,
     purpose,
     revenueMode: options.revenueMode ?? 'market',
     contractId: options.contractId ?? null,
     progress: 0,
-    required: complexity * quantity,
+    required: complexity * normalizedQuantity,
     unitCost: design.cost,
     unitSalePrice: design.salePrice,
     defectRisk: Math.max(4, 24 - Math.round(design.reliability / 4)),
@@ -43,7 +50,7 @@ function buildProductionRun(design, quantity, purpose, options = {}) {
 }
 
 function warehouseUsed(next) {
-  return next.finishedGoods.reduce((sum, lot) => sum + lot.quantity, 0);
+  return next.finishedGoods.reduce((sum, lot) => sum + lot.availableQuantity, 0);
 }
 
 function addFinishedGoods(next, run) {
@@ -55,6 +62,8 @@ function addFinishedGoods(next, run) {
     type: run.type,
     quantity: run.quantity,
     availableQuantity: run.quantity,
+    soldQuantity: 0,
+    deliveredQuantity: 0,
     revenueMode: run.revenueMode,
     contractId: run.contractId,
     unitSalePrice: run.unitSalePrice,
@@ -65,6 +74,17 @@ function addFinishedGoods(next, run) {
   next.finishedGoods.push(lot);
   run.stockLotId = lot.id;
   return lot;
+}
+
+function calculateMarketRevenue(lot, quantity) {
+  const gross = lot.unitSalePrice * quantity;
+  return lot.qaResult === 'defective' ? Math.round(gross * 0.55) : gross;
+}
+
+function calculateContractPayout(contract, lot, quantity) {
+  const unitReward = contract.reward / contract.quantity;
+  const gross = Math.round(unitReward * quantity);
+  return lot.qaResult === 'defective' ? Math.round(gross * 0.72) : gross;
 }
 
 export function acceptContract(state, contractId, designId) {
@@ -83,6 +103,8 @@ export function acceptContract(state, contractId, designId) {
   contract.assignedDesignId = designId;
   contract.productionRunId = null;
   contract.stockLotId = null;
+  contract.deliveredQuantity = 0;
+  contract.earnedReward = 0;
   next.eventLog.unshift(`Cycle ${next.company.cycle}: Accepted ${contract.title} for ${contract.client}. Production still must be queued.`);
   return next;
 }
@@ -90,23 +112,24 @@ export function acceptContract(state, contractId, designId) {
 export function queueProduction(state, designId, quantity = 1, purpose = 'market sale', options = {}) {
   const next = clone(state);
   const design = next.designs.find((item) => item.id === designId);
+  const normalizedQuantity = normalizeQuantity(quantity);
   if (!design) return next;
 
-  if (warehouseUsed(next) + quantity > next.company.warehouseCapacity) {
+  if (warehouseUsed(next) + normalizedQuantity > next.company.warehouseCapacity) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Production blocked. Finished goods warehouse is at capacity.`);
     return next;
   }
 
-  if (!canAffordBill(next.inventory, design.bill, quantity)) {
+  if (!canAffordBill(next.inventory, design.bill, normalizedQuantity)) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Production blocked. Materials unavailable for ${design.name}.`);
     return next;
   }
 
-  spendBill(next.inventory, design.bill, quantity);
-  next.productionRuns.push(buildProductionRun(design, quantity, purpose, options));
+  spendBill(next.inventory, design.bill, normalizedQuantity);
+  next.productionRuns.push(buildProductionRun(design, normalizedQuantity, purpose, options));
 
-  next.company.cash -= Math.round(design.cost * quantity * 0.35);
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantity} x ${design.name} for ${purpose}.`);
+  next.company.cash -= Math.round(design.cost * normalizedQuantity * 0.35);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}.`);
   return next;
 }
 
@@ -121,36 +144,42 @@ export function queueContractProduction(state, contractId) {
     return next;
   }
 
+  const remainingQuantity = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
   const existingRun = next.productionRuns.find((run) => run.contractId === contract.id && run.status !== 'complete');
   if (existingRun) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production already active for ${contract.title}.`);
     return next;
   }
 
-  if (contract.stockLotId) {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract stock already exists for ${contract.title}.`);
+  const reservedStock = next.finishedGoods
+    .filter((lot) => lot.contractId === contract.id && lot.status === 'reserved-contract')
+    .reduce((sum, lot) => sum + lot.availableQuantity, 0);
+
+  const quantityToBuild = Math.max(0, remainingQuantity - reservedStock);
+  if (quantityToBuild <= 0) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract stock already covers remaining delivery for ${contract.title}.`);
     return next;
   }
 
-  if (warehouseUsed(next) + contract.quantity > next.company.warehouseCapacity) {
+  if (warehouseUsed(next) + quantityToBuild > next.company.warehouseCapacity) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. Finished goods warehouse is at capacity.`);
     return next;
   }
 
-  if (!canAffordBill(next.inventory, design.bill, contract.quantity)) {
+  if (!canAffordBill(next.inventory, design.bill, quantityToBuild)) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. Materials unavailable for ${contract.title}.`);
     return next;
   }
 
-  spendBill(next.inventory, design.bill, contract.quantity);
-  const run = buildProductionRun(design, contract.quantity, 'contract fulfillment', {
+  spendBill(next.inventory, design.bill, quantityToBuild);
+  const run = buildProductionRun(design, quantityToBuild, 'contract fulfillment', {
     contractId: contract.id,
     revenueMode: 'contract',
   });
   next.productionRuns.push(run);
   contract.productionRunId = run.id;
-  next.company.cash -= Math.round(design.cost * contract.quantity * 0.35);
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued contract run for ${contract.title}. Payout reserved until delivery.`);
+  next.company.cash -= Math.round(design.cost * quantityToBuild * 0.35);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Payout reserved until delivery.`);
   return next;
 }
 
@@ -203,25 +232,29 @@ export function buyLicense(state, listingId) {
   return next;
 }
 
-export function sellFinishedGood(state, lotId) {
+export function sellFinishedGood(state, lotId, quantity = 1) {
   const next = clone(state);
   const lot = next.finishedGoods.find((item) => item.id === lotId);
   if (!lot || lot.status !== 'available-market' || lot.availableQuantity <= 0) return next;
 
-  const gross = lot.unitSalePrice * lot.availableQuantity;
-  const revenue = lot.qaResult === 'defective' ? Math.round(gross * 0.55) : gross;
+  const sellQuantity = Math.min(normalizeQuantity(quantity), lot.availableQuantity);
+  const revenue = calculateMarketRevenue(lot, sellQuantity);
   next.company.cash += revenue;
-  next.company.reputation += lot.qaResult === 'defective' ? -2 : 1;
-  lot.availableQuantity = 0;
-  lot.status = 'sold';
-  lot.soldCycle = next.company.cycle;
+  next.company.reputation += lot.qaResult === 'defective' ? -1 : 1;
+  lot.availableQuantity -= sellQuantity;
+  lot.soldQuantity = (lot.soldQuantity ?? 0) + sellQuantity;
+  if (lot.availableQuantity <= 0) {
+    lot.availableQuantity = 0;
+    lot.status = 'sold';
+    lot.soldCycle = next.company.cycle;
+  }
   next.eventLog.unshift(
-    `Cycle ${next.company.cycle}: Sold ${lot.quantity} x ${lot.designName}. ${lot.qaResult === 'defective' ? 'Defects reduced payout.' : 'Batch passed market acceptance.'} Revenue ${currency(revenue)}.`
+    `Cycle ${next.company.cycle}: Sold ${sellQuantity} x ${lot.designName}. ${lot.qaResult === 'defective' ? 'Defects reduced payout.' : 'Batch passed market acceptance.'} Revenue ${currency(revenue)}.`
   );
   return next;
 }
 
-export function deliverContractStock(state, contractId) {
+export function deliverContractStock(state, contractId, quantity = 1) {
   const next = clone(state);
   const contract = next.contracts.find((item) => item.id === contractId);
   if (!contract || contract.status !== 'accepted') return next;
@@ -229,7 +262,7 @@ export function deliverContractStock(state, contractId) {
   const lot = next.finishedGoods.find((item) => (
     item.contractId === contract.id
     && item.status === 'reserved-contract'
-    && item.availableQuantity >= contract.quantity
+    && item.availableQuantity > 0
   ));
 
   if (!lot) {
@@ -237,18 +270,33 @@ export function deliverContractStock(state, contractId) {
     return next;
   }
 
-  const defective = lot.qaResult === 'defective';
-  const payout = defective ? Math.round(contract.reward * 0.72) : contract.reward;
-  lot.availableQuantity -= contract.quantity;
-  lot.status = 'delivered';
-  lot.deliveredCycle = next.company.cycle;
-  contract.status = 'fulfilled';
-  contract.deliveredCycle = next.company.cycle;
-  contract.stockLotId = lot.id;
+  const remainingContractQuantity = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
+  const deliverQuantity = Math.min(normalizeQuantity(quantity), lot.availableQuantity, remainingContractQuantity);
+  if (deliverQuantity <= 0) return next;
+
+  const payout = calculateContractPayout(contract, lot, deliverQuantity);
+  lot.availableQuantity -= deliverQuantity;
+  lot.deliveredQuantity = (lot.deliveredQuantity ?? 0) + deliverQuantity;
+  contract.deliveredQuantity = (contract.deliveredQuantity ?? 0) + deliverQuantity;
+  contract.earnedReward = (contract.earnedReward ?? 0) + payout;
   next.company.cash += payout;
-  next.company.reputation += defective ? 1 : 4;
+  next.company.reputation += lot.qaResult === 'defective' ? 0 : 1;
+
+  if (lot.availableQuantity <= 0) {
+    lot.availableQuantity = 0;
+    lot.status = 'delivered';
+    lot.deliveredCycle = next.company.cycle;
+  }
+
+  if (contract.deliveredQuantity >= contract.quantity) {
+    contract.status = 'fulfilled';
+    contract.deliveredCycle = next.company.cycle;
+    contract.stockLotId = lot.id;
+    next.company.reputation += lot.qaResult === 'defective' ? 1 : 3;
+  }
+
   next.eventLog.unshift(
-    `Cycle ${next.company.cycle}: Delivered ${contract.title}. ${defective ? 'Client accepted at reduced payout.' : 'Contract fully satisfied.'} Contract payout ${currency(payout)}.`
+    `Cycle ${next.company.cycle}: Delivered ${deliverQuantity} x ${lot.designName} for ${contract.title}. ${lot.qaResult === 'defective' ? 'Client accepted at reduced payout.' : 'Delivery accepted.'} Payout ${currency(payout)}.`
   );
   return next;
 }
@@ -281,10 +329,12 @@ function resolveContractDeadlines(next) {
   for (const contract of next.contracts) {
     if (contract.status !== 'accepted') continue;
     if (next.company.cycle > contract.deadline) {
+      const completionRatio = Math.min(1, (contract.deliveredQuantity ?? 0) / contract.quantity);
+      const adjustedPenalty = Math.round(contract.penalty * (1 - completionRatio));
       contract.status = 'failed';
-      next.company.cash -= contract.penalty;
-      next.company.reputation -= 5;
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: Failed ${contract.title}. Penalty ${currency(contract.penalty)}.`);
+      next.company.cash -= adjustedPenalty;
+      next.company.reputation -= adjustedPenalty > 0 ? 5 : 1;
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: Failed ${contract.title}. Delivered ${contract.deliveredQuantity ?? 0}/${contract.quantity}. Penalty ${currency(adjustedPenalty)}.`);
     }
   }
 }
