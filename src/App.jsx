@@ -7,10 +7,12 @@ import {
   acceptContract,
   advanceCycle,
   buyLicense,
+  deliverContractStock,
   formatCredits,
   listDesignRights,
   queueContractProduction,
   queueProduction,
+  sellFinishedGood,
 } from './game/simulation.js';
 
 const departmentCards = [
@@ -38,6 +40,10 @@ function App() {
       .reduce((sum, run) => sum + run.quantity, 0);
   }, [game.productionRuns]);
 
+  const warehouseUsed = useMemo(() => {
+    return game.finishedGoods.reduce((sum, lot) => sum + lot.availableQuantity, 0);
+  }, [game.finishedGoods]);
+
   function applyAction(action) {
     setGame((current) => action(current));
   }
@@ -60,7 +66,7 @@ function App() {
           <p className="eyebrow">PHASE 1 PLAYABLE MANAGEMENT LOOP</p>
           <h1>Fleet Designer</h1>
           <p className="hero-copy">
-            Your aerospace company now has a live operating loop: accept contracts, queue contract-specific production, sell or license designs, buy rival production rights, advance cycles, pay burn rate, complete research, and try not to end up on the intergalactic breadline.
+            Your aerospace company now has a live operating loop: accept contracts, queue production, move completed batches into finished-goods stock, sell market lots, deliver reserved contract lots, and try not to end up on the intergalactic breadline.
           </p>
           <div className="command-row">
             <button className="primary-command" onClick={handleAdvanceCycle} disabled={game.company.status === 'bankrupt'}>
@@ -75,6 +81,7 @@ function App() {
           <span>Reputation: {game.company.reputation}</span>
           <span>Cycle: {game.company.cycle}</span>
           <span>Burn: {formatCredits(game.company.burnRate)} / cycle</span>
+          <span>Warehouse: {warehouseUsed}/{game.company.warehouseCapacity}</span>
         </div>
       </section>
 
@@ -120,7 +127,7 @@ function App() {
             <span><b>{game.productionRuns.length}</b> production runs</span>
             <span><b>{completedResearch.length}</b> completed research</span>
             <span><b>{capacityUsed}</b> factory load</span>
-            <span><b>{game.designs.length}</b> usable designs</span>
+            <span><b>{warehouseUsed}</b> finished goods stored</span>
           </div>
         </article>
       </section>
@@ -129,12 +136,13 @@ function App() {
         <article className="console-panel tall-panel">
           <div className="panel-heading">
             <span>Contract Board</span>
-            <small>accept, then build</small>
+            <small>accept, build, deliver</small>
           </div>
           <div className="stack-list">
             {game.contracts.map((contract) => {
               const assignedDesign = game.designs.find((design) => design.id === contract.assignedDesignId);
               const linkedRun = game.productionRuns.find((run) => run.id === contract.productionRunId);
+              const stockLot = game.finishedGoods.find((lot) => lot.id === contract.stockLotId || lot.contractId === contract.id);
               return (
                 <div className={`data-card ${contract.status}`} key={contract.id}>
                   <strong>{contract.title}</strong>
@@ -142,6 +150,7 @@ function App() {
                   <p>Need {contract.quantity} x {contract.requiredType}. Deadline C{contract.deadline}. Reward {formatCredits(contract.reward)}.</p>
                   {assignedDesign && <p>Assigned design: {assignedDesign.name}</p>}
                   {linkedRun && <p>Production run: {linkedRun.status} // {linkedRun.progress}/{linkedRun.required}</p>}
+                  {stockLot && <p>Reserved stock: {stockLot.status} // QA {stockLot.qaResult} // {stockLot.availableQuantity} available</p>}
                   <div className="button-row">
                     {contract.status === 'open' && game.designs
                       .filter((design) => design.type === contract.requiredType)
@@ -153,9 +162,14 @@ function App() {
                           Use {design.name}
                         </button>
                       ))}
-                    {contract.status === 'accepted' && (
-                      <button onClick={() => applyAction((state) => queueContractProduction(state, contract.id))} disabled={Boolean(contract.productionRunId)}>
+                    {contract.status === 'accepted' && !contract.productionRunId && (
+                      <button onClick={() => applyAction((state) => queueContractProduction(state, contract.id))}>
                         Queue Contract Run
+                      </button>
+                    )}
+                    {contract.status === 'accepted' && stockLot?.status === 'reserved-contract' && (
+                      <button onClick={() => applyAction((state) => deliverContractStock(state, contract.id))}>
+                        Deliver Stock
                       </button>
                     )}
                   </div>
@@ -201,6 +215,7 @@ function App() {
                 <small>{run.quantity} units // {run.purpose} // {run.revenueMode}</small>
                 <progress max={run.required} value={run.progress} />
                 <p>Defect risk {run.defectRisk}%. Status: {run.status}. QA: {run.qaResult ?? 'pending'}.</p>
+                {run.stockLotId && <p>Stock lot: {run.stockLotId}</p>}
               </div>
             ))}
           </div>
@@ -211,7 +226,7 @@ function App() {
         <article className="console-panel">
           <div className="panel-heading">
             <span>Inventory and Supply</span>
-            <small>auto-restocks each cycle</small>
+            <small>raw materials</small>
           </div>
           <div className="inventory-grid">
             {Object.entries(game.inventory).map(([name, amount]) => (
@@ -220,6 +235,37 @@ function App() {
           </div>
         </article>
 
+        <article className="console-panel">
+          <div className="panel-heading">
+            <span>Finished Goods Warehouse</span>
+            <small>{warehouseUsed}/{game.company.warehouseCapacity} capacity</small>
+          </div>
+          <div className="stack-list">
+            {game.finishedGoods.length === 0 && <p>No finished goods in storage.</p>}
+            {game.finishedGoods.map((lot) => (
+              <div className={`data-card ${lot.status}`} key={lot.id}>
+                <strong>{lot.designName}</strong>
+                <small>{lot.type} // {lot.status} // QA {lot.qaResult}</small>
+                <p>Lot {lot.id}. Quantity {lot.availableQuantity}/{lot.quantity}. Created C{lot.createdCycle}.</p>
+                <div className="button-row">
+                  {lot.status === 'available-market' && (
+                    <button onClick={() => applyAction((state) => sellFinishedGood(state, lot.id))}>
+                      Sell Lot
+                    </button>
+                  )}
+                  {lot.status === 'reserved-contract' && (
+                    <button onClick={() => applyAction((state) => deliverContractStock(state, lot.contractId))}>
+                      Deliver Contract Lot
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="two-column">
         <article className="console-panel">
           <div className="panel-heading">
             <span>R&D Dashboard</span>
@@ -236,9 +282,7 @@ function App() {
             ))}
           </div>
         </article>
-      </section>
 
-      <section className="two-column">
         <article className="console-panel">
           <div className="panel-heading">
             <span>IP and License Market</span>
@@ -257,7 +301,9 @@ function App() {
             ))}
           </div>
         </article>
+      </section>
 
+      <section className="two-column">
         <article className="console-panel">
           <div className="panel-heading">
             <span>Operations Log</span>
@@ -267,19 +313,19 @@ function App() {
             {game.eventLog.map((event, index) => <p key={`${event}-${index}`}>{event}</p>)}
           </div>
         </article>
-      </section>
 
-      <section className="console-panel">
-        <div className="panel-heading">
-          <span>Next Deepening Targets</span>
-          <small>phase 2 candidates</small>
-        </div>
-        <div className="tag-row large-tags">
-          <span><Scale size={16} /> Contract-specific production now exists; next step is reserving finished inventory as a separate stock object.</span>
-          <span>Engineer assignment controls should modify research speed.</span>
-          <span>Production should support exact quantities, priorities, and private/internal runs.</span>
-          <span>Design editor output should create new real designs rather than fixed starter designs.</span>
-        </div>
+        <article className="console-panel">
+          <div className="panel-heading">
+            <span>Next Deepening Targets</span>
+            <small>phase 2 candidates</small>
+          </div>
+          <div className="tag-row large-tags">
+            <span><Scale size={16} /> Finished goods now exist; next step is partial lot handling, scrapping, and priority production.</span>
+            <span>Engineer assignment controls should modify research speed.</span>
+            <span>Production should support exact quantities, priorities, and private/internal runs.</span>
+            <span>Design editor output should create new real designs rather than fixed starter designs.</span>
+          </div>
+        </article>
       </section>
 
       <AssetPreview />
