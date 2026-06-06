@@ -10,7 +10,7 @@ The risk is obvious: every system wants to become its own game. To avoid that, i
 
 ## Phase 0: Repository Foundation
 
-Status: started.
+Status: implemented as first scaffold.
 
 - Initialize Vite React app.
 - Establish hard sci-fi industrial theme.
@@ -20,15 +20,26 @@ Status: started.
 
 ## Phase 1: Playable Management Loop
 
+Status: first playable pass implemented.
+
 Goal: player can advance cycles and make meaningful business decisions.
 
-Core work:
+Implemented core work:
 
 - Company state: cash, reputation, cycle, burn rate, bankruptcy.
-- Turn advancement: revenue, payroll, research progress, production progress, market events.
-- Contract board: accept contracts with deadline, spec, reward, penalty.
-- Production queue: produce saved designs or generic starter parts.
-- Market listings: sell finished goods and list design rights.
+- Turn advancement: burn rate, research progress, production progress, supply restock, contract checks.
+- Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
+- Production queue: produce saved starter designs for market sale.
+- IP market: list owned design rights and buy AI production licenses.
+- Operations log: visible consequences for every major action.
+
+Known limitations to fix before calling Phase 1 complete:
+
+- Contract fulfillment currently detects completed batches but does not reserve contract-specific production cleanly.
+- Market sale production and contract production need separated purposes and payout handling.
+- Production quantity input is fixed at one unit from the UI.
+- Supply restocking is automatic and not yet tied to supplier contracts or commodity pricing.
+- Research engineer assignment is represented by data but not yet controllable in the UI.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
 
