@@ -20,6 +20,27 @@ function spendBill(inventory, bill, quantity = 1) {
   }
 }
 
+function buildProductionRun(design, quantity, purpose, options = {}) {
+  const complexity = design.type === 'vessel' ? 4 : design.type === 'module' ? 3 : 2;
+  return {
+    id: `run-${Date.now()}-${Math.round(Math.random() * 10000)}`,
+    designId: design.id,
+    designName: design.name,
+    type: design.type,
+    quantity,
+    purpose,
+    revenueMode: options.revenueMode ?? 'market',
+    contractId: options.contractId ?? null,
+    progress: 0,
+    required: complexity * quantity,
+    unitCost: design.cost,
+    unitSalePrice: design.salePrice,
+    defectRisk: Math.max(4, 24 - Math.round(design.reliability / 4)),
+    qaResult: null,
+    status: 'queued',
+  };
+}
+
 export function acceptContract(state, contractId, designId) {
   const next = clone(state);
   const contract = next.contracts.find((item) => item.id === contractId);
@@ -34,11 +55,12 @@ export function acceptContract(state, contractId, designId) {
 
   contract.status = 'accepted';
   contract.assignedDesignId = designId;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Accepted ${contract.title} for ${contract.client}.`);
+  contract.productionRunId = null;
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Accepted ${contract.title} for ${contract.client}. Production still must be queued.`);
   return next;
 }
 
-export function queueProduction(state, designId, quantity = 1, purpose = 'market') {
+export function queueProduction(state, designId, quantity = 1, purpose = 'market sale', options = {}) {
   const next = clone(state);
   const design = next.designs.find((item) => item.id === designId);
   if (!design) return next;
@@ -49,24 +71,44 @@ export function queueProduction(state, designId, quantity = 1, purpose = 'market
   }
 
   spendBill(next.inventory, design.bill, quantity);
-  const complexity = design.type === 'vessel' ? 4 : design.type === 'module' ? 3 : 2;
-  next.productionRuns.push({
-    id: `run-${Date.now()}-${Math.round(Math.random() * 10000)}`,
-    designId,
-    designName: design.name,
-    type: design.type,
-    quantity,
-    purpose,
-    progress: 0,
-    required: complexity * quantity,
-    unitCost: design.cost,
-    unitSalePrice: design.salePrice,
-    defectRisk: Math.max(4, 24 - Math.round(design.reliability / 4)),
-    status: 'queued',
-  });
+  next.productionRuns.push(buildProductionRun(design, quantity, purpose, options));
 
   next.company.cash -= Math.round(design.cost * quantity * 0.35);
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantity} × ${design.name} for ${purpose}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantity} x ${design.name} for ${purpose}.`);
+  return next;
+}
+
+export function queueContractProduction(state, contractId) {
+  const next = clone(state);
+  const contract = next.contracts.find((item) => item.id === contractId);
+  if (!contract || contract.status !== 'accepted') return next;
+
+  const design = next.designs.find((item) => item.id === contract.assignedDesignId);
+  if (!design) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. No assigned design found for ${contract.title}.`);
+    return next;
+  }
+
+  const existingRun = next.productionRuns.find((run) => run.contractId === contract.id && run.status !== 'complete');
+  if (existingRun) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production already active for ${contract.title}.`);
+    return next;
+  }
+
+  if (!canAffordBill(next.inventory, design.bill, contract.quantity)) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. Materials unavailable for ${contract.title}.`);
+    return next;
+  }
+
+  spendBill(next.inventory, design.bill, contract.quantity);
+  const run = buildProductionRun(design, contract.quantity, 'contract fulfillment', {
+    contractId: contract.id,
+    revenueMode: 'contract',
+  });
+  next.productionRuns.push(run);
+  contract.productionRunId = run.id;
+  next.company.cash -= Math.round(design.cost * contract.quantity * 0.35);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued contract run for ${contract.title}. Payout reserved until delivery.`);
   return next;
 }
 
@@ -120,26 +162,50 @@ export function buyLicense(state, listingId) {
 }
 
 function completeProduction(next, run) {
-  const gross = run.unitSalePrice * run.quantity;
   const defective = Math.random() * 100 < run.defectRisk;
-  const revenue = defective ? Math.round(gross * 0.55) : gross;
-  next.company.cash += revenue;
-  next.company.reputation += defective ? -2 : 1;
-  next.eventLog.unshift(
-    `Cycle ${next.company.cycle}: Completed ${run.quantity} × ${run.designName}. ${defective ? 'Defects reduced payout.' : 'Batch passed QA.'} Revenue ${currency(revenue)}.`
-  );
+  run.qaResult = defective ? 'defective' : 'passed';
+
+  if (run.revenueMode === 'market') {
+    const gross = run.unitSalePrice * run.quantity;
+    const revenue = defective ? Math.round(gross * 0.55) : gross;
+    next.company.cash += revenue;
+    next.company.reputation += defective ? -2 : 1;
+    next.eventLog.unshift(
+      `Cycle ${next.company.cycle}: Completed ${run.quantity} x ${run.designName} for market sale. ${defective ? 'Defects reduced payout.' : 'Batch passed QA.'} Revenue ${currency(revenue)}.`
+    );
+    return;
+  }
+
+  if (run.revenueMode === 'contract') {
+    next.eventLog.unshift(
+      `Cycle ${next.company.cycle}: Contract batch completed for ${run.designName}. ${defective ? 'QA defects flagged before delivery.' : 'Batch passed QA and awaits client delivery.'}`
+    );
+    return;
+  }
+
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Completed internal production for ${run.designName}.`);
 }
 
 function resolveContracts(next) {
   for (const contract of next.contracts) {
     if (contract.status !== 'accepted') continue;
-    const design = next.designs.find((item) => item.id === contract.assignedDesignId);
-    const matchingRun = next.productionRuns.find((run) => run.designId === contract.assignedDesignId && run.status === 'complete' && run.quantity >= contract.quantity);
-    if (matchingRun && design) {
+
+    const contractRun = next.productionRuns.find((run) => (
+      run.contractId === contract.id
+      && run.status === 'complete'
+      && run.quantity >= contract.quantity
+    ));
+
+    if (contractRun) {
+      const defective = contractRun.qaResult === 'defective';
+      const payout = defective ? Math.round(contract.reward * 0.72) : contract.reward;
       contract.status = 'fulfilled';
-      next.company.cash += contract.reward;
-      next.company.reputation += 4;
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: Fulfilled ${contract.title}. Contract payout ${currency(contract.reward)}.`);
+      contract.deliveredCycle = next.company.cycle;
+      next.company.cash += payout;
+      next.company.reputation += defective ? 1 : 4;
+      next.eventLog.unshift(
+        `Cycle ${next.company.cycle}: Delivered ${contract.title}. ${defective ? 'Client accepted at reduced payout.' : 'Contract fully satisfied.'} Contract payout ${currency(payout)}.`
+      );
     } else if (next.company.cycle > contract.deadline) {
       contract.status = 'failed';
       next.company.cash -= contract.penalty;
@@ -158,7 +224,7 @@ function progressResearch(next) {
       project.status = 'complete';
       if (project.discipline === 'supply chain') next.company.burnRate = Math.round(next.company.burnRate * 0.94);
       if (project.discipline === 'manufacturing') next.company.factoryCapacity += 1;
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: Research complete — ${project.name}. ${project.effect}.`);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: Research complete - ${project.name}. ${project.effect}.`);
     }
   }
 }
