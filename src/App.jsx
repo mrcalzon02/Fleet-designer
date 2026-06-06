@@ -9,6 +9,7 @@ import {
   buyLicense,
   formatCredits,
   listDesignRights,
+  queueContractProduction,
   queueProduction,
 } from './game/simulation.js';
 
@@ -59,7 +60,7 @@ function App() {
           <p className="eyebrow">PHASE 1 PLAYABLE MANAGEMENT LOOP</p>
           <h1>Fleet Designer</h1>
           <p className="hero-copy">
-            Your aerospace company now has a live operating loop: accept contracts, queue production, sell or license designs, buy rival production rights, advance cycles, pay burn rate, complete research, and try not to end up on the intergalactic breadline.
+            Your aerospace company now has a live operating loop: accept contracts, queue contract-specific production, sell or license designs, buy rival production rights, advance cycles, pay burn rate, complete research, and try not to end up on the intergalactic breadline.
           </p>
           <div className="command-row">
             <button className="primary-command" onClick={handleAdvanceCycle} disabled={game.company.status === 'bankrupt'}>
@@ -128,37 +129,47 @@ function App() {
         <article className="console-panel tall-panel">
           <div className="panel-heading">
             <span>Contract Board</span>
-            <small>accept using compatible designs</small>
+            <small>accept, then build</small>
           </div>
           <div className="stack-list">
-            {game.contracts.map((contract) => (
-              <div className={`data-card ${contract.status}`} key={contract.id}>
-                <strong>{contract.title}</strong>
-                <small>{contract.client} // {contract.category}</small>
-                <p>Need {contract.quantity} × {contract.requiredType}. Deadline C{contract.deadline}. Reward {formatCredits(contract.reward)}.</p>
-                <div className="button-row">
-                  {game.designs
-                    .filter((design) => design.type === contract.requiredType)
-                    .map((design) => (
-                      <button
-                        key={design.id}
-                        onClick={() => applyAction((state) => acceptContract(state, contract.id, design.id))}
-                        disabled={contract.status !== 'open'}
-                      >
-                        Use {design.name}
+            {game.contracts.map((contract) => {
+              const assignedDesign = game.designs.find((design) => design.id === contract.assignedDesignId);
+              const linkedRun = game.productionRuns.find((run) => run.id === contract.productionRunId);
+              return (
+                <div className={`data-card ${contract.status}`} key={contract.id}>
+                  <strong>{contract.title}</strong>
+                  <small>{contract.client} // {contract.category}</small>
+                  <p>Need {contract.quantity} x {contract.requiredType}. Deadline C{contract.deadline}. Reward {formatCredits(contract.reward)}.</p>
+                  {assignedDesign && <p>Assigned design: {assignedDesign.name}</p>}
+                  {linkedRun && <p>Production run: {linkedRun.status} // {linkedRun.progress}/{linkedRun.required}</p>}
+                  <div className="button-row">
+                    {contract.status === 'open' && game.designs
+                      .filter((design) => design.type === contract.requiredType)
+                      .map((design) => (
+                        <button
+                          key={design.id}
+                          onClick={() => applyAction((state) => acceptContract(state, contract.id, design.id))}
+                        >
+                          Use {design.name}
+                        </button>
+                      ))}
+                    {contract.status === 'accepted' && (
+                      <button onClick={() => applyAction((state) => queueContractProduction(state, contract.id))} disabled={Boolean(contract.productionRunId)}>
+                        Queue Contract Run
                       </button>
-                    ))}
+                    )}
+                  </div>
+                  <em>{contract.status}</em>
                 </div>
-                <em>{contract.status}</em>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </article>
 
         <article className="console-panel tall-panel">
           <div className="panel-heading">
             <span>Design Catalog</span>
-            <small>produce or license</small>
+            <small>market production or rights</small>
           </div>
           <div className="stack-list">
             {game.designs.map((design) => (
@@ -167,7 +178,7 @@ function App() {
                 <small>{design.type} // {design.rights}</small>
                 <p>Quality {design.quality}. Reliability {design.reliability}. Sale {formatCredits(design.salePrice)}.</p>
                 <div className="button-row">
-                  <button onClick={() => applyAction((state) => queueProduction(state, design.id, 1, 'market sale'))}>Produce</button>
+                  <button onClick={() => applyAction((state) => queueProduction(state, design.id, 1, 'market sale'))}>Produce for Market</button>
                   <button onClick={() => applyAction((state) => listDesignRights(state, design.id))} disabled={design.rights !== 'owned' || design.marketListed}>
                     List Rights
                   </button>
@@ -187,9 +198,9 @@ function App() {
             {game.productionRuns.map((run) => (
               <div className={`data-card ${run.status}`} key={run.id}>
                 <strong>{run.designName}</strong>
-                <small>{run.quantity} units // {run.purpose}</small>
+                <small>{run.quantity} units // {run.purpose} // {run.revenueMode}</small>
                 <progress max={run.required} value={run.progress} />
-                <p>Defect risk {run.defectRisk}%. Status: {run.status}.</p>
+                <p>Defect risk {run.defectRisk}%. Status: {run.status}. QA: {run.qaResult ?? 'pending'}.</p>
               </div>
             ))}
           </div>
@@ -264,9 +275,9 @@ function App() {
           <small>phase 2 candidates</small>
         </div>
         <div className="tag-row large-tags">
-          <span><Scale size={16} /> Contract fulfillment should reserve completed batches instead of paying both market and contract revenue.</span>
+          <span><Scale size={16} /> Contract-specific production now exists; next step is reserving finished inventory as a separate stock object.</span>
           <span>Engineer assignment controls should modify research speed.</span>
-          <span>Production should support exact quantities, priorities, and contract-specific runs.</span>
+          <span>Production should support exact quantities, priorities, and private/internal runs.</span>
           <span>Design editor output should create new real designs rather than fixed starter designs.</span>
         </div>
       </section>
