@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Factory, FlaskConical, PackageSearch, Radar, Scale, Ship, TrendingUp } from 'lucide-react';
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AssetPreview } from './components/AssetPreview.jsx';
+import { CompanyHeader } from './components/CompanyHeader.jsx';
+import { ContractBoard } from './components/ContractBoard.jsx';
+import { FinancialOverview } from './components/FinancialOverview.jsx';
+import { InventoryWarehousePanels } from './components/InventoryWarehousePanels.jsx';
+import { OperationsPanels } from './components/OperationsPanels.jsx';
+import { ProductionPanels } from './components/ProductionPanels.jsx';
 import { initialGameState } from './game/initialState.js';
 import {
   acceptContract,
@@ -9,7 +13,6 @@ import {
   buyLicense,
   cancelProductionRun,
   deliverContractStock,
-  formatCredits,
   listDesignRights,
   queueContractProduction,
   queueProduction,
@@ -17,30 +20,6 @@ import {
   setProductionPriority,
   toggleProductionPause,
 } from './game/simulation.js';
-
-const departmentCards = [
-  { title: 'R&D Lab', icon: FlaskConical, note: 'Assign engineers and complete technology projects.' },
-  { title: 'Design Studio', icon: Radar, note: 'Saved designs now feed production and licensing.' },
-  { title: 'Production', icon: Factory, note: 'Queue builds, set priority, pause, resume, or cancel.' },
-  { title: 'Supply Chain', icon: PackageSearch, note: 'Materials gate every production run.' },
-  { title: 'Market', icon: TrendingUp, note: 'License rival designs or sell your own rights.' },
-  { title: 'Vessel Builder', icon: Ship, note: 'Vessel designs are economic products.' },
-];
-
-function QuantityControl({ label, value, min = 1, max = 999, onChange }) {
-  return (
-    <label className="quantity-control">
-      <span>{label}</span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(event) => onChange(Math.max(min, Math.min(max, Number.parseInt(event.target.value || min, 10))))}
-      />
-    </label>
-  );
-}
 
 function App() {
   const [game, setGame] = useState(initialGameState);
@@ -50,8 +29,8 @@ function App() {
   const [productionQuantities, setProductionQuantities] = useState({});
   const [lotQuantities, setLotQuantities] = useState({});
 
-  const acceptedContracts = game.contracts.filter((contract) => contract.status === 'accepted');
   const openContracts = game.contracts.filter((contract) => contract.status === 'open');
+  const acceptedContracts = game.contracts.filter((contract) => contract.status === 'accepted');
   const completedResearch = game.research.filter((project) => project.status === 'complete');
 
   const activeWorkUnits = useMemo(() => {
@@ -63,6 +42,21 @@ function App() {
   const warehouseUsed = useMemo(() => {
     return game.finishedGoods.reduce((sum, lot) => sum + lot.availableQuantity, 0);
   }, [game.finishedGoods]);
+
+  function applyAction(action) {
+    setGame((current) => action(current));
+  }
+
+  function handleAdvanceCycle() {
+    setGame((current) => {
+      const next = advanceCycle(current);
+      setCashHistory((history) => [
+        ...history,
+        { cycle: `C${next.company.cycle}`, cash: Math.max(0, next.company.cash) / 1000000 },
+      ].slice(-12));
+      return next;
+    });
+  }
 
   function getProductionQuantity(designId) {
     return productionQuantities[designId] ?? 1;
@@ -80,347 +74,70 @@ function App() {
     setLotQuantities((current) => ({ ...current, [lotId]: value }));
   }
 
-  function applyAction(action) {
-    setGame((current) => action(current));
-  }
-
-  function handleAdvanceCycle() {
-    setGame((current) => {
-      const next = advanceCycle(current);
-      setCashHistory((history) => [
-        ...history,
-        { cycle: `C${next.company.cycle}`, cash: Math.max(0, next.company.cash) / 1000000 },
-      ].slice(-12));
-      return next;
-    });
-  }
-
   return (
     <main className="app-shell">
-      <section className="hero-panel">
-        <div>
-          <p className="eyebrow">PHASE 1 PLAYABLE MANAGEMENT LOOP</p>
-          <h1>Fleet Designer</h1>
-          <p className="hero-copy">
-            Factory management now spends finite capacity across the queue by priority. You can pause, resume, cancel, salvage, and reorder production pressure instead of letting every run consume impossible duplicated capacity.
-          </p>
-          <div className="command-row">
-            <button className="primary-command" onClick={handleAdvanceCycle} disabled={game.company.status === 'bankrupt'}>
-              Advance Cycle
-            </button>
-            <span className={`status-pill ${game.company.status}`}>{game.company.status}</span>
-          </div>
-        </div>
-        <div className="status-stack" aria-label="company status">
-          <span>Company: {game.company.name}</span>
-          <span>Cash: {formatCredits(game.company.cash)}</span>
-          <span>Reputation: {game.company.reputation}</span>
-          <span>Cycle: {game.company.cycle}</span>
-          <span>Burn: {formatCredits(game.company.burnRate)} / cycle</span>
-          <span>Factory: {activeWorkUnits} work units queued</span>
-          <span>Warehouse: {warehouseUsed}/{game.company.warehouseCapacity}</span>
-        </div>
-      </section>
+      <CompanyHeader
+        company={game.company}
+        activeWorkUnits={activeWorkUnits}
+        warehouseUsed={warehouseUsed}
+        onAdvanceCycle={handleAdvanceCycle}
+      />
 
-      <section className="dashboard-grid">
-        {departmentCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <article className="system-card" key={card.title}>
-              <Icon size={26} />
-              <h2>{card.title}</h2>
-              <strong>{card.note}</strong>
-            </article>
-          );
-        })}
-      </section>
-
-      <section className="two-column">
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>Financial Telemetry</span>
-            <small>millions of credits</small>
-          </div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={cashHistory}>
-                <XAxis dataKey="cycle" />
-                <YAxis />
-                <Tooltip />
-                <Area type="monotone" dataKey="cash" strokeWidth={2} fillOpacity={0.22} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
-
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>Operating Summary</span>
-            <small>cycle {game.company.cycle}</small>
-          </div>
-          <div className="metric-grid">
-            <span><b>{openContracts.length}</b> open contracts</span>
-            <span><b>{acceptedContracts.length}</b> active contracts</span>
-            <span><b>{game.productionRuns.length}</b> production runs</span>
-            <span><b>{completedResearch.length}</b> completed research</span>
-            <span><b>{activeWorkUnits}</b> queued work units</span>
-            <span><b>{warehouseUsed}</b> finished goods stored</span>
-          </div>
-        </article>
-      </section>
+      <FinancialOverview
+        cashHistory={cashHistory}
+        openContracts={openContracts}
+        acceptedContracts={acceptedContracts}
+        productionRuns={game.productionRuns}
+        completedResearch={completedResearch}
+        activeWorkUnits={activeWorkUnits}
+        warehouseUsed={warehouseUsed}
+        cycle={game.company.cycle}
+      />
 
       <section className="three-column">
-        <article className="console-panel tall-panel">
-          <div className="panel-heading">
-            <span>Contract Board</span>
-            <small>accept, build, deliver</small>
-          </div>
-          <div className="stack-list">
-            {game.contracts.map((contract) => {
-              const assignedDesign = game.designs.find((design) => design.id === contract.assignedDesignId);
-              const linkedRun = game.productionRuns.find((run) => run.id === contract.productionRunId);
-              const stockLot = game.finishedGoods.find((lot) => lot.id === contract.stockLotId || lot.contractId === contract.id);
-              const remaining = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
-              const deliverQty = stockLot ? getLotQuantity(`contract-${stockLot.id}`, Math.min(stockLot.availableQuantity, remaining)) : 1;
-              return (
-                <div className={`data-card ${contract.status}`} key={contract.id}>
-                  <strong>{contract.title}</strong>
-                  <small>{contract.client} // {contract.category}</small>
-                  <p>Need {contract.quantity} x {contract.requiredType}. Delivered {contract.deliveredQuantity ?? 0}/{contract.quantity}. Deadline C{contract.deadline}. Reward {formatCredits(contract.reward)}.</p>
-                  {assignedDesign && <p>Assigned design: {assignedDesign.name}</p>}
-                  {linkedRun && <p>Production run: {linkedRun.status} // priority {linkedRun.priority} // {linkedRun.progress}/{linkedRun.required}</p>}
-                  {stockLot && <p>Reserved stock: {stockLot.status} // QA {stockLot.qaResult} // {stockLot.availableQuantity} available</p>}
-                  <div className="button-row">
-                    {contract.status === 'open' && game.designs
-                      .filter((design) => design.type === contract.requiredType)
-                      .map((design) => (
-                        <button
-                          key={design.id}
-                          onClick={() => applyAction((state) => acceptContract(state, contract.id, design.id))}
-                        >
-                          Use {design.name}
-                        </button>
-                      ))}
-                    {contract.status === 'accepted' && remaining > 0 && (
-                      <button onClick={() => applyAction((state) => queueContractProduction(state, contract.id))}>
-                        Queue Remaining Run
-                      </button>
-                    )}
-                    {contract.status === 'accepted' && stockLot?.status === 'reserved-contract' && remaining > 0 && (
-                      <>
-                        <QuantityControl
-                          label="Deliver"
-                          value={deliverQty}
-                          max={Math.min(stockLot.availableQuantity, remaining)}
-                          onChange={(value) => setLotQuantity(`contract-${stockLot.id}`, value)}
-                        />
-                        <button onClick={() => applyAction((state) => deliverContractStock(state, contract.id, deliverQty))}>
-                          Deliver Stock
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  <em>{contract.status}</em>
-                </div>
-              );
-            })}
-          </div>
-        </article>
+        <ContractBoard
+          contracts={game.contracts}
+          designs={game.designs}
+          productionRuns={game.productionRuns}
+          finishedGoods={game.finishedGoods}
+          getLotQuantity={getLotQuantity}
+          setLotQuantity={setLotQuantity}
+          onAcceptContract={(contractId, designId) => applyAction((state) => acceptContract(state, contractId, designId))}
+          onQueueContractProduction={(contractId) => applyAction((state) => queueContractProduction(state, contractId))}
+          onDeliverContractStock={(contractId, quantity) => applyAction((state) => deliverContractStock(state, contractId, quantity))}
+        />
 
-        <article className="console-panel tall-panel">
-          <div className="panel-heading">
-            <span>Design Catalog</span>
-            <small>quantity production</small>
-          </div>
-          <div className="stack-list">
-            {game.designs.map((design) => {
-              const quantity = getProductionQuantity(design.id);
-              return (
-                <div className="data-card" key={design.id}>
-                  <strong>{design.name}</strong>
-                  <small>{design.type} // {design.rights}</small>
-                  <p>Quality {design.quality}. Reliability {design.reliability}. Sale {formatCredits(design.salePrice)}.</p>
-                  <div className="button-row">
-                    <QuantityControl
-                      label="Build"
-                      value={quantity}
-                      max={25}
-                      onChange={(value) => setProductionQuantity(design.id, value)}
-                    />
-                    <button onClick={() => applyAction((state) => queueProduction(state, design.id, quantity, 'market sale'))}>Produce for Market</button>
-                    <button onClick={() => applyAction((state) => listDesignRights(state, design.id))} disabled={design.rights !== 'owned' || design.marketListed}>
-                      List Rights
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </article>
-
-        <article className="console-panel tall-panel">
-          <div className="panel-heading">
-            <span>Production Queue</span>
-            <small>capacity {game.company.factoryCapacity} / cycle</small>
-          </div>
-          <div className="stack-list">
-            {game.productionRuns.length === 0 && <p>No production runs queued.</p>}
-            {game.productionRuns.map((run) => (
-              <div className={`data-card ${run.status}`} key={run.id}>
-                <strong>{run.designName}</strong>
-                <small>{run.quantity} units // {run.purpose} // {run.revenueMode} // priority {run.priority ?? 'normal'}</small>
-                <progress max={run.required} value={run.progress} />
-                <p>Progress {run.progress}/{run.required}. Defect risk {run.defectRisk}%. Status: {run.status}. QA: {run.qaResult ?? 'pending'}.</p>
-                {run.stockLotId && <p>Stock lot: {run.stockLotId}</p>}
-                {!['complete', 'canceled'].includes(run.status) && (
-                  <div className="button-row segmented-actions">
-                    {['high', 'normal', 'low'].map((priority) => (
-                      <button
-                        key={priority}
-                        className={run.priority === priority ? 'selected-action' : ''}
-                        onClick={() => applyAction((state) => setProductionPriority(state, run.id, priority))}
-                      >
-                        {priority}
-                      </button>
-                    ))}
-                    <button onClick={() => applyAction((state) => toggleProductionPause(state, run.id))}>
-                      {run.status === 'paused' ? 'Resume' : 'Pause'}
-                    </button>
-                    <button className="danger-action" onClick={() => applyAction((state) => cancelProductionRun(state, run.id))}>
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </article>
+        <ProductionPanels
+          designs={game.designs}
+          productionRuns={game.productionRuns}
+          getProductionQuantity={getProductionQuantity}
+          setProductionQuantity={setProductionQuantity}
+          onQueueProduction={(designId, quantity) => applyAction((state) => queueProduction(state, designId, quantity, 'market sale'))}
+          onListDesignRights={(designId) => applyAction((state) => listDesignRights(state, designId))}
+          onSetProductionPriority={(runId, priority) => applyAction((state) => setProductionPriority(state, runId, priority))}
+          onToggleProductionPause={(runId) => applyAction((state) => toggleProductionPause(state, runId))}
+          onCancelProductionRun={(runId) => applyAction((state) => cancelProductionRun(state, runId))}
+        />
       </section>
 
-      <section className="two-column">
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>Inventory and Supply</span>
-            <small>raw materials</small>
-          </div>
-          <div className="inventory-grid">
-            {Object.entries(game.inventory).map(([name, amount]) => (
-              <span key={name}><b>{name}</b>{amount}</span>
-            ))}
-          </div>
-        </article>
+      <InventoryWarehousePanels
+        inventory={game.inventory}
+        finishedGoods={game.finishedGoods}
+        warehouseUsed={warehouseUsed}
+        warehouseCapacity={game.company.warehouseCapacity}
+        getLotQuantity={getLotQuantity}
+        setLotQuantity={setLotQuantity}
+        onSellFinishedGood={(lotId, quantity) => applyAction((state) => sellFinishedGood(state, lotId, quantity))}
+        onDeliverContractStock={(contractId, quantity) => applyAction((state) => deliverContractStock(state, contractId, quantity))}
+      />
 
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>Finished Goods Warehouse</span>
-            <small>{warehouseUsed}/{game.company.warehouseCapacity} capacity</small>
-          </div>
-          <div className="stack-list">
-            {game.finishedGoods.length === 0 && <p>No finished goods in storage.</p>}
-            {game.finishedGoods.map((lot) => {
-              const lotQty = getLotQuantity(lot.id, lot.availableQuantity || 1);
-              return (
-                <div className={`data-card ${lot.status}`} key={lot.id}>
-                  <strong>{lot.designName}</strong>
-                  <small>{lot.type} // {lot.status} // QA {lot.qaResult}</small>
-                  <p>Lot {lot.id}. Available {lot.availableQuantity}/{lot.quantity}. Sold {lot.soldQuantity ?? 0}. Delivered {lot.deliveredQuantity ?? 0}. Created C{lot.createdCycle}.</p>
-                  <div className="button-row">
-                    {lot.status === 'available-market' && lot.availableQuantity > 0 && (
-                      <>
-                        <QuantityControl
-                          label="Sell"
-                          value={lotQty}
-                          max={lot.availableQuantity}
-                          onChange={(value) => setLotQuantity(lot.id, value)}
-                        />
-                        <button onClick={() => applyAction((state) => sellFinishedGood(state, lot.id, lotQty))}>
-                          Sell Stock
-                        </button>
-                      </>
-                    )}
-                    {lot.status === 'reserved-contract' && lot.availableQuantity > 0 && (
-                      <>
-                        <QuantityControl
-                          label="Deliver"
-                          value={lotQty}
-                          max={lot.availableQuantity}
-                          onChange={(value) => setLotQuantity(lot.id, value)}
-                        />
-                        <button onClick={() => applyAction((state) => deliverContractStock(state, lot.contractId, lotQty))}>
-                          Deliver Contract Stock
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </article>
-      </section>
-
-      <section className="two-column">
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>R&D Dashboard</span>
-            <small>passive progress</small>
-          </div>
-          <div className="stack-list">
-            {game.research.map((project) => (
-              <div className={`data-card ${project.status}`} key={project.id}>
-                <strong>{project.name}</strong>
-                <small>{project.discipline} // engineers {project.engineers}</small>
-                <progress max={project.required} value={project.progress} />
-                <p>{project.effect}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>IP and License Market</span>
-            <small>buy or sell production rights</small>
-          </div>
-          <div className="stack-list">
-            {game.marketListings.map((listing) => (
-              <div className="data-card" key={listing.id}>
-                <strong>{listing.designName}</strong>
-                <small>{listing.seller} // {listing.type}</small>
-                <p>License price {formatCredits(listing.price)}.</p>
-                <button onClick={() => applyAction((state) => buyLicense(state, listing.id))} disabled={listing.seller === game.company.name}>
-                  Buy License
-                </button>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="two-column">
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>Operations Log</span>
-            <small>latest events</small>
-          </div>
-          <div className="event-log">
-            {game.eventLog.map((event, index) => <p key={`${event}-${index}`}>{event}</p>)}
-          </div>
-        </article>
-
-        <article className="console-panel">
-          <div className="panel-heading">
-            <span>Next Deepening Targets</span>
-            <small>phase 2 candidates</small>
-          </div>
-          <div className="tag-row large-tags">
-            <span><Scale size={16} /> Queue controls now exist; next step is separating the cockpit into small components to keep App.jsx from becoming a god file.</span>
-            <span>Engineer assignment controls should modify research speed.</span>
-            <span>Supply should move from automatic restocking into supplier contracts and commodity pricing.</span>
-            <span>Design editor output should create new real designs rather than fixed starter designs.</span>
-          </div>
-        </article>
-      </section>
+      <OperationsPanels
+        research={game.research}
+        marketListings={game.marketListings}
+        eventLog={game.eventLog}
+        companyName={game.company.name}
+        onBuyLicense={(listingId) => applyAction((state) => buyLicense(state, listingId))}
+      />
 
       <AssetPreview />
     </main>
