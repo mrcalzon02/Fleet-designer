@@ -20,17 +20,19 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with quantity production, partial stock handling, and separated production, stock, sales, and delivery.
+Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, and queue controls.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
 Implemented core work:
 
 - Company state: cash, reputation, cycle, burn rate, bankruptcy.
-- Turn advancement: burn rate, research progress, production progress, supply restock, contract deadline checks.
+- Turn advancement: burn rate, research progress, priority-based factory allocation, supply restock, contract deadline checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
 - Contract-specific production: accepted contracts now require their own queued production run.
 - Quantity production: market production can now be queued in variable quantities from the cockpit UI.
+- Factory capacity allocation: factory output is now spent once per cycle across active runs in priority order rather than duplicated across every run.
+- Queue management: production runs can be set to high, normal, or low priority; paused and resumed; or canceled for partial salvage.
 - Finished goods warehouse: completed production now creates stock lots rather than immediately paying out.
 - Market sales: market stock lots can be sold manually after production completes, including partial lot sales.
 - Contract delivery: reserved contract stock lots can be delivered manually after production completes, including partial contract delivery.
@@ -49,6 +51,8 @@ Recently fixed:
 - Added UI controls for selling market lots and delivering reserved contract lots.
 - Added cockpit quantity inputs for market production, market stock sale, and contract stock delivery.
 - Added partial sale and partial delivery simulation functions with proportional payouts.
+- Added production run priority, pause/resume, cancel, material salvage, and cash salvage.
+- Replaced unrealistic per-run capacity application with a single priority-sorted factory capacity allocator.
 
 Known limitations to fix before calling Phase 1 complete:
 
@@ -56,8 +60,8 @@ Known limitations to fix before calling Phase 1 complete:
 - Contract production still auto-builds the remaining needed amount rather than letting the player choose overproduction or staged batches.
 - Supply restocking is automatic and not yet tied to supplier contracts or commodity pricing.
 - Research engineer assignment is represented by data but not yet controllable in the UI.
-- Contract runs cannot yet be reprioritized, canceled, split, or delayed deliberately.
 - Warehouse capacity is checked at queue time, but there is not yet a cost for storage, warehousing upgrades, or stock aging.
+- `App.jsx` is now intentionally functional but too large; the next efficiency pass should split panels into focused components to reduce code overhead and keep future changes safer.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
 
