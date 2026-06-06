@@ -7,18 +7,21 @@ import {
   acceptContract,
   advanceCycle,
   buyLicense,
+  cancelProductionRun,
   deliverContractStock,
   formatCredits,
   listDesignRights,
   queueContractProduction,
   queueProduction,
   sellFinishedGood,
+  setProductionPriority,
+  toggleProductionPause,
 } from './game/simulation.js';
 
 const departmentCards = [
   { title: 'R&D Lab', icon: FlaskConical, note: 'Assign engineers and complete technology projects.' },
   { title: 'Design Studio', icon: Radar, note: 'Saved designs now feed production and licensing.' },
-  { title: 'Production', icon: Factory, note: 'Queue builds for market sale or contract work.' },
+  { title: 'Production', icon: Factory, note: 'Queue builds, set priority, pause, resume, or cancel.' },
   { title: 'Supply Chain', icon: PackageSearch, note: 'Materials gate every production run.' },
   { title: 'Market', icon: TrendingUp, note: 'License rival designs or sell your own rights.' },
   { title: 'Vessel Builder', icon: Ship, note: 'Vessel designs are economic products.' },
@@ -51,10 +54,10 @@ function App() {
   const openContracts = game.contracts.filter((contract) => contract.status === 'open');
   const completedResearch = game.research.filter((project) => project.status === 'complete');
 
-  const capacityUsed = useMemo(() => {
+  const activeWorkUnits = useMemo(() => {
     return game.productionRuns
-      .filter((run) => run.status !== 'complete')
-      .reduce((sum, run) => sum + run.quantity, 0);
+      .filter((run) => ['queued', 'active'].includes(run.status))
+      .reduce((sum, run) => sum + Math.max(0, run.required - run.progress), 0);
   }, [game.productionRuns]);
 
   const warehouseUsed = useMemo(() => {
@@ -99,7 +102,7 @@ function App() {
           <p className="eyebrow">PHASE 1 PLAYABLE MANAGEMENT LOOP</p>
           <h1>Fleet Designer</h1>
           <p className="hero-copy">
-            Your aerospace company now supports quantity-based production, finished-goods stock lots, partial market sales, partial contract deliveries, and proportional penalties when a client only receives part of an order before the deadline.
+            Factory management now spends finite capacity across the queue by priority. You can pause, resume, cancel, salvage, and reorder production pressure instead of letting every run consume impossible duplicated capacity.
           </p>
           <div className="command-row">
             <button className="primary-command" onClick={handleAdvanceCycle} disabled={game.company.status === 'bankrupt'}>
@@ -114,6 +117,7 @@ function App() {
           <span>Reputation: {game.company.reputation}</span>
           <span>Cycle: {game.company.cycle}</span>
           <span>Burn: {formatCredits(game.company.burnRate)} / cycle</span>
+          <span>Factory: {activeWorkUnits} work units queued</span>
           <span>Warehouse: {warehouseUsed}/{game.company.warehouseCapacity}</span>
         </div>
       </section>
@@ -159,7 +163,7 @@ function App() {
             <span><b>{acceptedContracts.length}</b> active contracts</span>
             <span><b>{game.productionRuns.length}</b> production runs</span>
             <span><b>{completedResearch.length}</b> completed research</span>
-            <span><b>{capacityUsed}</b> factory load</span>
+            <span><b>{activeWorkUnits}</b> queued work units</span>
             <span><b>{warehouseUsed}</b> finished goods stored</span>
           </div>
         </article>
@@ -184,7 +188,7 @@ function App() {
                   <small>{contract.client} // {contract.category}</small>
                   <p>Need {contract.quantity} x {contract.requiredType}. Delivered {contract.deliveredQuantity ?? 0}/{contract.quantity}. Deadline C{contract.deadline}. Reward {formatCredits(contract.reward)}.</p>
                   {assignedDesign && <p>Assigned design: {assignedDesign.name}</p>}
-                  {linkedRun && <p>Production run: {linkedRun.status} // {linkedRun.progress}/{linkedRun.required}</p>}
+                  {linkedRun && <p>Production run: {linkedRun.status} // priority {linkedRun.priority} // {linkedRun.progress}/{linkedRun.required}</p>}
                   {stockLot && <p>Reserved stock: {stockLot.status} // QA {stockLot.qaResult} // {stockLot.availableQuantity} available</p>}
                   <div className="button-row">
                     {contract.status === 'open' && game.designs
@@ -257,17 +261,36 @@ function App() {
         <article className="console-panel tall-panel">
           <div className="panel-heading">
             <span>Production Queue</span>
-            <small>factory capacity {game.company.factoryCapacity}</small>
+            <small>capacity {game.company.factoryCapacity} / cycle</small>
           </div>
           <div className="stack-list">
             {game.productionRuns.length === 0 && <p>No production runs queued.</p>}
             {game.productionRuns.map((run) => (
               <div className={`data-card ${run.status}`} key={run.id}>
                 <strong>{run.designName}</strong>
-                <small>{run.quantity} units // {run.purpose} // {run.revenueMode}</small>
+                <small>{run.quantity} units // {run.purpose} // {run.revenueMode} // priority {run.priority ?? 'normal'}</small>
                 <progress max={run.required} value={run.progress} />
-                <p>Defect risk {run.defectRisk}%. Status: {run.status}. QA: {run.qaResult ?? 'pending'}.</p>
+                <p>Progress {run.progress}/{run.required}. Defect risk {run.defectRisk}%. Status: {run.status}. QA: {run.qaResult ?? 'pending'}.</p>
                 {run.stockLotId && <p>Stock lot: {run.stockLotId}</p>}
+                {!['complete', 'canceled'].includes(run.status) && (
+                  <div className="button-row segmented-actions">
+                    {['high', 'normal', 'low'].map((priority) => (
+                      <button
+                        key={priority}
+                        className={run.priority === priority ? 'selected-action' : ''}
+                        onClick={() => applyAction((state) => setProductionPriority(state, run.id, priority))}
+                      >
+                        {priority}
+                      </button>
+                    ))}
+                    <button onClick={() => applyAction((state) => toggleProductionPause(state, run.id))}>
+                      {run.status === 'paused' ? 'Resume' : 'Pause'}
+                    </button>
+                    <button className="danger-action" onClick={() => applyAction((state) => cancelProductionRun(state, run.id))}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -391,7 +414,7 @@ function App() {
             <small>phase 2 candidates</small>
           </div>
           <div className="tag-row large-tags">
-            <span><Scale size={16} /> Quantity controls and partial lots now exist; next step is priority production, canceling, and stock reservation.</span>
+            <span><Scale size={16} /> Queue controls now exist; next step is separating the cockpit into small components to keep App.jsx from becoming a god file.</span>
             <span>Engineer assignment controls should modify research speed.</span>
             <span>Supply should move from automatic restocking into supplier contracts and commodity pricing.</span>
             <span>Design editor output should create new real designs rather than fixed starter designs.</span>
