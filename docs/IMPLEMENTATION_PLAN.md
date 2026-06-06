@@ -20,7 +20,7 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: first playable pass implemented.
+Status: playable pass implemented and contract-production separation added.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
@@ -29,17 +29,26 @@ Implemented core work:
 - Company state: cash, reputation, cycle, burn rate, bankruptcy.
 - Turn advancement: burn rate, research progress, production progress, supply restock, contract checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
-- Production queue: produce saved starter designs for market sale.
+- Contract-specific production: accepted contracts now require their own queued production run.
+- Market production: market runs pay market revenue when completed.
+- Contract delivery: contract runs pay only when delivered against the accepted contract.
+- Defect handling: defective market batches receive reduced sale revenue; defective contract batches receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
 
+Recently fixed:
+
+- Removed the early double-pay behavior where a completed production run could pay market revenue and then also satisfy a contract payout.
+- Added `revenueMode` and `contractId` to production runs so market, contract, and future internal production can be separated cleanly.
+- Added UI controls for explicitly queuing contract runs after accepting a contract.
+
 Known limitations to fix before calling Phase 1 complete:
 
-- Contract fulfillment currently detects completed batches but does not reserve contract-specific production cleanly.
-- Market sale production and contract production need separated purposes and payout handling.
-- Production quantity input is fixed at one unit from the UI.
+- Finished products are not yet tracked as warehouse stock objects; completion immediately resolves revenue or delivery.
+- Production quantity input is fixed at one unit for market production from the UI.
 - Supply restocking is automatic and not yet tied to supplier contracts or commodity pricing.
 - Research engineer assignment is represented by data but not yet controllable in the UI.
+- Contract runs cannot yet be reprioritized, canceled, split, or delayed deliberately.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
 
