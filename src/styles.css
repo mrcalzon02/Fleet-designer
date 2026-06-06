@@ -113,6 +113,30 @@ h1 {
   border-color: rgba(255, 184, 0, 0.75);
 }
 
+.segmented-actions {
+  border-top: 1px solid rgba(0, 255, 209, 0.14);
+  padding-top: 10px;
+}
+.segmented-actions button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+.selected-action {
+  border-color: rgba(255, 184, 0, 0.95);
+  background: rgba(255, 184, 0, 0.18);
+  color: #ffb800;
+}
+.danger-action {
+  border-color: rgba(255, 59, 59, 0.75);
+  background: rgba(255, 59, 59, 0.12);
+}
+.danger-action:hover:not(:disabled), .danger-action:focus-visible {
+  border-color: #ff3b3b;
+  outline-color: rgba(255, 59, 59, 0.25);
+}
+
 .quantity-control {
   display: inline-grid;
   grid-template-columns: auto minmax(72px, 90px);
@@ -248,6 +272,8 @@ h1 {
 .data-card.accepted,
 .data-card.active,
 .data-card.reserved-contract { border-color: rgba(255, 184, 0, 0.55); }
+.data-card.paused { border-color: rgba(122, 145, 153, 0.7); opacity: 0.82; }
+.data-card.canceled { border-color: rgba(255, 59, 59, 0.55); opacity: 0.74; }
 .data-card.fulfilled,
 .data-card.complete,
 .data-card.sold,
