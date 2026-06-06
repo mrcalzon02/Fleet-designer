@@ -1,5 +1,8 @@
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+const PRIORITY_ORDER = { high: 0, normal: 1, low: 2 };
+const ACTIVE_RUN_STATUSES = new Set(['queued', 'active']);
+
 const currency = (amount) => new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -16,6 +19,10 @@ function normalizeQuantity(value, fallback = 1) {
   return Math.max(1, parsed);
 }
 
+function normalizePriority(priority) {
+  return Object.hasOwn(PRIORITY_ORDER, priority) ? priority : 'normal';
+}
+
 function canAffordBill(inventory, bill, quantity = 1) {
   return Object.entries(bill).every(([key, value]) => (inventory[key] ?? 0) >= value * quantity);
 }
@@ -23,6 +30,12 @@ function canAffordBill(inventory, bill, quantity = 1) {
 function spendBill(inventory, bill, quantity = 1) {
   for (const [key, value] of Object.entries(bill)) {
     inventory[key] = (inventory[key] ?? 0) - value * quantity;
+  }
+}
+
+function restoreBill(inventory, bill, quantity = 1, ratio = 1) {
+  for (const [key, value] of Object.entries(bill ?? {})) {
+    inventory[key] = (inventory[key] ?? 0) + Math.floor(value * quantity * ratio);
   }
 }
 
@@ -42,6 +55,9 @@ function buildProductionRun(design, quantity, purpose, options = {}) {
     required: complexity * normalizedQuantity,
     unitCost: design.cost,
     unitSalePrice: design.salePrice,
+    materialBill: { ...design.bill },
+    priority: normalizePriority(options.priority),
+    queuedCycle: options.queuedCycle ?? null,
     defectRisk: Math.max(4, 24 - Math.round(design.reliability / 4)),
     qaResult: null,
     stockLotId: null,
@@ -126,7 +142,10 @@ export function queueProduction(state, designId, quantity = 1, purpose = 'market
   }
 
   spendBill(next.inventory, design.bill, normalizedQuantity);
-  next.productionRuns.push(buildProductionRun(design, normalizedQuantity, purpose, options));
+  next.productionRuns.push(buildProductionRun(design, normalizedQuantity, purpose, {
+    ...options,
+    queuedCycle: next.company.cycle,
+  }));
 
   next.company.cash -= Math.round(design.cost * normalizedQuantity * 0.35);
   next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}.`);
@@ -145,7 +164,7 @@ export function queueContractProduction(state, contractId) {
   }
 
   const remainingQuantity = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
-  const existingRun = next.productionRuns.find((run) => run.contractId === contract.id && run.status !== 'complete');
+  const existingRun = next.productionRuns.find((run) => run.contractId === contract.id && !['complete', 'canceled'].includes(run.status));
   if (existingRun) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production already active for ${contract.title}.`);
     return next;
@@ -175,11 +194,57 @@ export function queueContractProduction(state, contractId) {
   const run = buildProductionRun(design, quantityToBuild, 'contract fulfillment', {
     contractId: contract.id,
     revenueMode: 'contract',
+    priority: 'high',
+    queuedCycle: next.company.cycle,
   });
   next.productionRuns.push(run);
   contract.productionRunId = run.id;
   next.company.cash -= Math.round(design.cost * quantityToBuild * 0.35);
   next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Payout reserved until delivery.`);
+  return next;
+}
+
+export function setProductionPriority(state, runId, priority) {
+  const next = clone(state);
+  const run = next.productionRuns.find((item) => item.id === runId);
+  if (!run || ['complete', 'canceled'].includes(run.status)) return next;
+  run.priority = normalizePriority(priority);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Set ${run.designName} run priority to ${run.priority}.`);
+  return next;
+}
+
+export function toggleProductionPause(state, runId) {
+  const next = clone(state);
+  const run = next.productionRuns.find((item) => item.id === runId);
+  if (!run || ['complete', 'canceled'].includes(run.status)) return next;
+
+  if (run.status === 'paused') {
+    run.status = run.progress > 0 ? 'active' : 'queued';
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Resumed production run for ${run.designName}.`);
+  } else {
+    run.status = 'paused';
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Paused production run for ${run.designName}.`);
+  }
+  return next;
+}
+
+export function cancelProductionRun(state, runId) {
+  const next = clone(state);
+  const run = next.productionRuns.find((item) => item.id === runId);
+  if (!run || ['complete', 'canceled'].includes(run.status)) return next;
+
+  const progressRatio = run.required > 0 ? run.progress / run.required : 0;
+  const salvageRatio = progressRatio === 0 ? 1 : 0.35;
+  const cashSalvage = Math.round(run.unitCost * run.quantity * (progressRatio === 0 ? 0.2 : 0.08));
+  restoreBill(next.inventory, run.materialBill, run.quantity, salvageRatio);
+  next.company.cash += cashSalvage;
+  run.status = 'canceled';
+  run.canceledCycle = next.company.cycle;
+
+  const contract = next.contracts.find((item) => item.productionRunId === run.id);
+  if (contract) contract.productionRunId = null;
+
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Canceled ${run.designName} run. Salvage recovered ${currency(cashSalvage)} plus reusable materials.`);
   return next;
 }
 
@@ -361,15 +426,26 @@ function restockSpotMarket(next) {
   if (next.company.cycle % 3 === 0) next.inventory.driveCores += 1;
 }
 
-export function advanceCycle(state) {
-  const next = clone(state);
-  next.company.cycle += 1;
-  next.company.cash -= next.company.burnRate;
+function allocateFactoryCapacity(next) {
+  let capacity = next.company.factoryCapacity;
+  let capacityUsed = 0;
+  const activeRuns = next.productionRuns
+    .filter((run) => ACTIVE_RUN_STATUSES.has(run.status))
+    .sort((a, b) => {
+      const priorityDelta = PRIORITY_ORDER[normalizePriority(a.priority)] - PRIORITY_ORDER[normalizePriority(b.priority)];
+      if (priorityDelta !== 0) return priorityDelta;
+      return (a.queuedCycle ?? 0) - (b.queuedCycle ?? 0);
+    });
 
-  for (const run of next.productionRuns) {
-    if (run.status === 'complete') continue;
+  for (const run of activeRuns) {
+    if (capacity <= 0) break;
     run.status = 'active';
-    run.progress += next.company.factoryCapacity;
+    const remaining = Math.max(0, run.required - run.progress);
+    const applied = Math.min(remaining, capacity);
+    run.progress += applied;
+    capacity -= applied;
+    capacityUsed += applied;
+
     if (run.progress >= run.required) {
       run.progress = run.required;
       run.status = 'complete';
@@ -377,6 +453,15 @@ export function advanceCycle(state) {
     }
   }
 
+  return capacityUsed;
+}
+
+export function advanceCycle(state) {
+  const next = clone(state);
+  next.company.cycle += 1;
+  next.company.cash -= next.company.burnRate;
+
+  const capacityUsed = allocateFactoryCapacity(next);
   progressResearch(next);
   resolveContractDeadlines(next);
   restockSpotMarket(next);
@@ -385,7 +470,7 @@ export function advanceCycle(state) {
     next.company.status = 'bankrupt';
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Bankruptcy triggered. Welcome to the intergalactic breadline.`);
   } else {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Burn paid, factories updated, markets shifted.`);
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Burn paid, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, markets shifted.`);
   }
 
   next.eventLog = next.eventLog.slice(0, 18);
