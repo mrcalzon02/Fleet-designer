@@ -16,6 +16,7 @@ export const initialGameState = {
     hullPlate: 22,
     driveCores: 4,
   },
+  finishedGoods: [],
   designs: [
     {
       id: 'cmp-power-bus-a',
@@ -70,6 +71,7 @@ export const initialGameState = {
       penalty: 450000,
       status: 'open',
       assignedDesignId: null,
+      productionRunId: null,
     },
     {
       id: 'ct-002',
@@ -83,6 +85,7 @@ export const initialGameState = {
       penalty: 900000,
       status: 'open',
       assignedDesignId: null,
+      productionRunId: null,
     },
     {
       id: 'ct-003',
@@ -96,6 +99,7 @@ export const initialGameState = {
       penalty: 300000,
       status: 'open',
       assignedDesignId: null,
+      productionRunId: null,
     },
   ],
   productionRuns: [],
