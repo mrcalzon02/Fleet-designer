@@ -9,6 +9,9 @@ export const initialGameState = {
     refineryCapacity: 4,
     warehouseCapacity: 100,
     status: 'operating',
+    difficultyId: 'normal',
+    difficultyName: 'Normal',
+    rivalCompanyIds: ['rival-ironwake', 'rival-silverline', 'rival-redline'],
     unlockedTechIds: ['tech-scrap-industrial-basics'],
     unlockedNodeIds: [
       'node-crude-power-bus',
