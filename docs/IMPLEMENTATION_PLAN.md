@@ -49,6 +49,8 @@ Implemented core work:
 - Component node library: seeded early crude nodes, late advanced nodes, stat modifiers, port counts, shapes, descriptions, and technology families.
 - Corporate technology seeds: player and NPC corporations now have defined starting node access profiles for future differentiation.
 - Node inspection UI: cockpit now shows component node descriptions, stat effects, shapes, ports, tech tree entries, and corporate seed profiles.
+- Prototype blueprint synthesis: node chains now calculate design quality, reliability, cost, sale price, bills of material, defect pressure, and chain stat totals.
+- Producible node-chain designs: prototype blueprints can be promoted into owned designs that appear in the design catalog and can enter production.
 - Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
@@ -75,6 +77,8 @@ Recently fixed:
 - Added warehouse inspection and scrapping controls to the finished-goods panel.
 - Added `nodeLibrary.js` with first-pass component nodes, technology tree entries, corporation seeds, and node stat summarization helpers.
 - Added `NodeTechnologyPanel` to expose node data, corporate tech seeds, and total chained stat effects in the cockpit.
+- Added `designSimulation.js` with prototype node-chain blueprints, design calculation, bill pressure, and prototype design creation.
+- Added prototype blueprint cards to the node technology panel with live calculated design output and create-design controls.
 
 Known limitations to fix before calling Phase 1 complete:
 
@@ -83,7 +87,7 @@ Known limitations to fix before calling Phase 1 complete:
 - Procurement has spot prices, supplier contracts, and refinery conversion, but no supplier reputation, route risk, negotiated terms, or refinery upgrades yet.
 - Engineer hiring, firing, training, salary pressure, burnout events, and deep specialization are not implemented yet.
 - Warehouse capacity and storage costs exist, but there are not yet warehousing upgrades, cold storage, insurance, or stock reservation policies.
-- Component nodes are data-visible but not yet integrated into actual design construction, production stats, research unlocks, or spatial drag/drop editing.
+- Component nodes can create calculated prototype designs, but not yet through spatial drag/drop editing, research-gated unlocking, corporation-specific availability checks, or visual connection validation.
 - The simulation file is now the next place to watch for growth; future mechanics should be split by domain when it becomes harder to read.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
