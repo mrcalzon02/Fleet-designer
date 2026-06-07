@@ -20,12 +20,19 @@ function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
   if (!template) return null;
   const placed = new Map(placedCells.map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
   const routed = new Map();
+  const ports = new Map();
+
   for (const report of connectionMetrics?.reports ?? []) {
     for (const cell of report.route ?? []) {
       const key = `${cell.x},${cell.y}`;
       routed.set(key, Math.max(routed.get(key) ?? 0, 1));
     }
   }
+
+  for (const anchor of connectionMetrics?.portAnchors ?? []) {
+    ports.set(`${anchor.x},${anchor.y}`, anchor.role);
+  }
+
   for (const congested of connectionMetrics?.congestion?.congestedCells ?? []) {
     routed.set(congested.key, congested.count);
   }
@@ -38,9 +45,10 @@ function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
             const key = `${cellIndex},${rowIndex}`;
             const placedNodeId = placed.get(key);
             const routeCount = routed.get(key) ?? 0;
+            const portRole = ports.get(key);
             return (
-              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${routeCount ? 'routed' : ''} ${routeCount > 1 ? 'congested' : ''} ${placedNodeId ? 'occupied' : ''}`} key={`${rowIndex}-${cellIndex}`} title={placedNodeId ?? (routeCount ? `route x${routeCount}` : '')}>
-                {placedNodeId ? nodeGlyph(placedNodeId) : routeCount > 1 ? '╳' : routeCount ? '─' : cell === 'X' ? '■' : '·'}
+              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${routeCount ? 'routed' : ''} ${routeCount > 1 ? 'congested' : ''} ${placedNodeId ? 'occupied' : ''} ${portRole ? `port-${portRole}` : ''}`} key={`${rowIndex}-${cellIndex}`} title={placedNodeId ?? (portRole ? `${portRole} port` : routeCount ? `route x${routeCount}` : '')}>
+                {portRole === 'output' ? 'O' : portRole === 'input' ? 'I' : placedNodeId ? nodeGlyph(placedNodeId) : routeCount > 1 ? '╳' : routeCount ? '─' : cell === 'X' ? '■' : '·'}
               </span>
             );
           })}
@@ -103,6 +111,7 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
       {template && <p>Template: {template.name}. {template.description}</p>}
       <TemplateGrid template={template} placedCells={placedCells} connectionMetrics={design.connectionMetrics} />
       <ConnectionReport reports={reports} />
+      <p>Port anchors: O = output, I = input. Routes now begin and end at edge-derived port cells.</p>
       <p>Route congestion: {design.connectionMetrics?.congestion?.congestionPenalty ?? 0} penalty across {(design.connectionMetrics?.congestion?.congestedCells ?? []).length} congested cells.</p>
       <p>Layout modifiers: {formatStats(design.connectionMetrics?.summary ?? {})}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
