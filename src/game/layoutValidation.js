@@ -1,3 +1,4 @@
+import { calculateConnectionMetrics } from './connectionMetrics.js';
 import { templateArea, templateById, templateHeight, templateWidth } from './layoutTemplates.js';
 import { componentNodeLibrary } from './nodeLibrary.js';
 
@@ -126,7 +127,8 @@ function validateConnections(blueprint, issues) {
 export function validateBlueprintLayout(blueprint) {
   const template = templateById(blueprint.layoutTemplateId, blueprint.type);
   const footprint = calculateBlueprintFootprint(blueprint);
-  const issues = [];
+  const connectionMetrics = calculateConnectionMetrics(blueprint);
+  const issues = [...(connectionMetrics.issues ?? [])];
   const allowedArea = templateArea(template);
   const allowedWidth = templateWidth(template);
   const allowedHeight = templateHeight(template);
@@ -150,5 +152,6 @@ export function validateBlueprintLayout(blueprint) {
     template,
     rule: template,
     placedCells: placedCells(blueprint),
+    connectionMetrics,
   };
 }
