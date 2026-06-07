@@ -20,14 +20,14 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, and early supplier procurement.
+Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, supplier procurement, and refinery processing.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
 Implemented core work:
 
 - Company state: cash, reputation, cycle, burn rate, bankruptcy.
-- Turn advancement: burn rate, assigned-engineer research progress, priority-based factory allocation, supplier contract processing, commodity price movement, contract deadline checks.
+- Turn advancement: burn rate, assigned-engineer research progress, priority-based factory allocation, supplier contract processing, refinery job processing, commodity price movement, contract deadline checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
 - Contract-specific production: accepted contracts now require their own queued production run.
 - Quantity production: market production can now be queued in variable quantities from the cockpit UI.
@@ -43,6 +43,8 @@ Implemented core work:
 - Procurement console: raw materials can be bought on the spot market and supplier contracts can be activated or suspended.
 - Supplier contracts: active contracts deliver materials each cycle, charge cash, can miss deliveries, and expire after their lock period.
 - Commodity pricing: material spot prices move each cycle using simple volatility and trend rules.
+- Refinery recipes: raw inputs can be converted into higher-value production materials through paid refinery jobs.
+- Refinery capacity: refinery work advances through limited per-cycle processing capacity.
 - Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
@@ -62,14 +64,15 @@ Recently fixed:
 - Extracted cockpit UI into `CompanyHeader`, `FinancialOverview`, `ContractBoard`, `ProductionPanels`, `InventoryWarehousePanels`, `OperationsPanels`, and `QuantityControl`.
 - Added `researchSimulation.js` to keep R&D assignment and progress logic out of the main simulation file.
 - Added an engineer roster with specialty, skill, salary, fatigue, morale, and project assignment.
-- Added `supplySimulation.js` to keep commodity pricing, spot buys, and supplier contract processing out of the main simulation file.
+- Added `supplySimulation.js` to keep commodity pricing, spot buys, supplier contract processing, and refinery jobs out of the main simulation file.
 - Replaced the free automatic restock with player-controlled spot purchases and paid supplier contracts.
+- Added refinery recipes, refinery capacity, refinery job queuing, and refinery queue display.
 
 Known limitations to fix before calling Phase 1 complete:
 
 - Stock lots can be partially consumed but not manually split, merged, scrapped, inspected, or reclassified.
 - Contract production still auto-builds the remaining needed amount rather than letting the player choose overproduction or staged batches.
-- Procurement has simple spot prices and supplier contracts, but no refinery conversion, supplier reputation, route risk, storage costs, or long-term negotiated terms yet.
+- Procurement has spot prices, supplier contracts, and refinery conversion, but no supplier reputation, route risk, storage costs, negotiated terms, or refinery upgrades yet.
 - Engineer hiring, firing, training, salary pressure, burnout events, and deep specialization are not implemented yet.
 - Warehouse capacity is checked at queue time, but there is not yet a cost for storage, warehousing upgrades, or stock aging.
 - The simulation file is now the next place to watch for growth; future mechanics should be split by domain when it becomes harder to read.
