@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { difficultyProfiles, getDifficultyProfile } from '../game/difficultyProfiles.js';
 import { describeRivalBehaviorAtTechLevel, rivalTemplatesForDifficulty } from '../game/rivalCompanyTemplates.js';
+import { totalRivalMarketPressure } from '../game/rivalSimulation.js';
 
 function formatMultiplier(key, value) {
   const label = key.replace(/[A-Z]/g, (match) => ` ${match.toLowerCase()}`);
@@ -18,7 +19,7 @@ function DifficultyCard({ profile, active }) {
   );
 }
 
-function RivalCard({ rival, techLevel }) {
+function RivalTemplateCard({ rival, techLevel }) {
   return (
     <div className="data-card">
       <strong>{rival.name}</strong>
@@ -35,14 +36,33 @@ function RivalCard({ rival, techLevel }) {
   );
 }
 
+function LiveRivalCard({ rival }) {
+  return (
+    <div className="data-card active">
+      <strong>{rival.name}</strong>
+      <small>{rival.archetype} // tech {rival.techLevel} // market {rival.marketShare}%</small>
+      <p>{rival.currentBehavior}</p>
+      <p>Pressure: aggression {rival.aggressionIndex}, bid {rival.contractBidAggression}, research {rival.researchSpeedIndex}.</p>
+      <p>Last action: {rival.lastAction}</p>
+      <p>Research: {rival.researchPreferences.join(', ')}.</p>
+      <p>Preferred modules: {rival.preferredModuleCategories.join(', ')}.</p>
+      <p>Vehicles: {rival.preferredVehicleClasses.join(', ')}.</p>
+      <p>Pricing: {rival.pricingStrategy}. Licensing: {rival.licensingStrategy}.</p>
+    </div>
+  );
+}
+
 export function CampaignPressurePanel({ game, onSetDifficulty }) {
   const activeDifficultyId = game?.company?.difficultyId ?? 'normal';
   const [difficultyId, setDifficultyId] = useState(activeDifficultyId);
   const [techLevel, setTechLevel] = useState(1);
   const selectedProfile = getDifficultyProfile(difficultyId);
   const activeProfile = getDifficultyProfile(activeDifficultyId);
-  const rivals = useMemo(() => rivalTemplatesForDifficulty(difficultyId), [difficultyId]);
+  const previewRivals = useMemo(() => rivalTemplatesForDifficulty(difficultyId), [difficultyId]);
   const active = selectedProfile.id === activeProfile.id;
+  const liveRivals = game?.rivalCompanies ?? [];
+  const showingLiveRivals = active && liveRivals.length > 0;
+  const marketPressure = showingLiveRivals ? totalRivalMarketPressure(game).toFixed(1) : 'preview';
 
   return (
     <section className="two-column">
@@ -51,7 +71,7 @@ export function CampaignPressurePanel({ game, onSetDifficulty }) {
           <span>Campaign Pressure Setup</span>
           <small>{activeProfile.name} active</small>
         </div>
-        <p>Difficulty now affects research speed and supply/refinery costs. Rival behavior remains a preview until rival simulation is instantiated.</p>
+        <p>Difficulty affects research, supply, labor, production overhead, defect pressure, warehouse maintenance, and lightweight rival posture. Rival market mutation remains intentionally limited.</p>
         <div className="button-row segmented-actions">
           {difficultyProfiles.map((profile) => (
             <button
@@ -68,7 +88,7 @@ export function CampaignPressurePanel({ game, onSetDifficulty }) {
           <button disabled={active} onClick={() => onSetDifficulty(difficultyId)} type="button">Apply Difficulty</button>
         </div>
         <label className="quantity-control">
-          <span>Tech Level</span>
+          <span>Preview Tech Level</span>
           <input
             min="1"
             max="10"
@@ -78,15 +98,18 @@ export function CampaignPressurePanel({ game, onSetDifficulty }) {
           />
         </label>
         <DifficultyCard profile={selectedProfile} active={active} />
+        <p>Live rival market pressure: {marketPressure}.</p>
       </article>
 
       <article className="console-panel">
         <div className="panel-heading">
-          <span>Rival Company Preview</span>
-          <small>{rivals.length} selected from 17 templates</small>
+          <span>{showingLiveRivals ? 'Live Rival Companies' : 'Rival Company Preview'}</span>
+          <small>{showingLiveRivals ? `${liveRivals.length} active rivals` : `${previewRivals.length} selected from 17 templates`}</small>
         </div>
         <div className="stack-list">
-          {rivals.map((rival) => <RivalCard rival={rival} techLevel={techLevel} key={rival.id} />)}
+          {showingLiveRivals
+            ? liveRivals.map((rival) => <LiveRivalCard rival={rival} key={rival.id} />)
+            : previewRivals.map((rival) => <RivalTemplateCard rival={rival} techLevel={techLevel} key={rival.id} />)}
         </div>
       </article>
     </section>
