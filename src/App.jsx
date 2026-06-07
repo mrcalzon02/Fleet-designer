@@ -4,6 +4,7 @@ import { CompanyHeader } from './components/CompanyHeader.jsx';
 import { ContractBoard } from './components/ContractBoard.jsx';
 import { FinancialOverview } from './components/FinancialOverview.jsx';
 import { InventoryWarehousePanels } from './components/InventoryWarehousePanels.jsx';
+import { NodeTechnologyPanel } from './components/NodeTechnologyPanel.jsx';
 import { OperationsPanels } from './components/OperationsPanels.jsx';
 import { ProductionPanels } from './components/ProductionPanels.jsx';
 import { initialGameState } from './game/initialState.js';
@@ -160,6 +161,8 @@ function App() {
         onAssignEngineer={(engineerId, projectId) => applyAction((state) => assignEngineerToProject(state, engineerId, projectId))}
         onUnassignEngineer={(engineerId) => applyAction((state) => unassignEngineer(state, engineerId))}
       />
+
+      <NodeTechnologyPanel />
 
       <AssetPreview />
     </main>
