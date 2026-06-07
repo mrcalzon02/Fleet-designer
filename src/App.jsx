@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AssetPreview } from './components/AssetPreview.jsx';
+import { CampaignPressurePanel } from './components/CampaignPressurePanel.jsx';
 import { CompanyHeader } from './components/CompanyHeader.jsx';
 import { ContractBoard } from './components/ContractBoard.jsx';
 import { FinancialOverview } from './components/FinancialOverview.jsx';
@@ -104,6 +105,8 @@ function App() {
         warehouseUsed={warehouseUsed}
         cycle={game.company.cycle}
       />
+
+      <CampaignPressurePanel />
 
       <section className="three-column">
         <ContractBoard
