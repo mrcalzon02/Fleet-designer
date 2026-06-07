@@ -1,3 +1,4 @@
+import { calculateConnectionMetrics } from './connectionMetrics.js';
 import { validateBlueprintLayout } from './layoutValidation.js';
 import { componentNodeLibrary, summarizeNodeStats } from './nodeLibrary.js';
 
@@ -93,6 +94,10 @@ function sumNodeTier(nodes) {
   return nodes.reduce((sum, node) => sum + (node.tier ?? 0), 0);
 }
 
+function mergedStats(baseStats, connectionSummary) {
+  return { ...baseStats, layout: connectionSummary };
+}
+
 function billWithNodePressure(baseBill, stats, type) {
   const bill = { ...baseBill };
   const electronicsPressure = Math.max(0, Math.round(((stats.automation ?? 0) + (stats.powerStability ?? 0) + (stats.electronicsDemand ?? 0)) / 18));
@@ -123,23 +128,29 @@ export function blueprintAvailability(state, blueprint) {
 
 export function calculateBlueprintDesign(blueprint) {
   const nodes = nodesForBlueprint(blueprint);
-  const stats = summarizeNodeStats(nodes);
+  const nodeStats = summarizeNodeStats(nodes);
+  const connectionMetrics = calculateConnectionMetrics(blueprint);
+  const stats = mergedStats(nodeStats, connectionMetrics.summary);
   const tierWeight = sumNodeTier(nodes);
   const layout = validateBlueprintLayout(blueprint);
   const typeBaseCost = blueprint.type === 'vessel' ? 1250000 : blueprint.type === 'module' ? 460000 : 190000;
   const typeBaseSale = blueprint.type === 'vessel' ? 2300000 : blueprint.type === 'module' ? 820000 : 360000;
 
-  const positivePerformance = (stats.efficiency ?? 0)
-    + (stats.automation ?? 0)
-    + (stats.durability ?? 0) * 0.45
-    + (stats.thrust ?? 0) * 0.35
-    + (stats.powerOutput ?? 0) * 0.28
-    + (stats.powerStability ?? 0) * 0.6;
-  const riskLoad = (stats.defectRisk ?? 0) + Math.max(0, stats.heat ?? 0) * 0.35 + (stats.maintenance ?? 0) * 0.3;
+  const positivePerformance = (nodeStats.efficiency ?? 0)
+    + (connectionMetrics.summary.efficiency ?? 0) * 1.5
+    + (nodeStats.automation ?? 0)
+    + (nodeStats.durability ?? 0) * 0.45
+    + (nodeStats.thrust ?? 0) * 0.35
+    + (nodeStats.powerOutput ?? 0) * 0.28
+    + (nodeStats.powerStability ?? 0) * 0.6;
+  const riskLoad = (nodeStats.defectRisk ?? 0)
+    + (connectionMetrics.summary.defectRisk ?? 0)
+    + Math.max(0, (nodeStats.heat ?? 0) + (connectionMetrics.summary.heat ?? 0)) * 0.35
+    + (nodeStats.maintenance ?? 0) * 0.3;
 
   const quality = clamp(Math.round(38 + tierWeight * 4 + positivePerformance * 0.18 - riskLoad * 0.08), 5, 98);
-  const reliability = clamp(Math.round(42 + (stats.reliability ?? 0) + (stats.powerStability ?? 0) * 0.35 - (stats.defectRisk ?? 0) * 0.6 - Math.max(0, stats.heat ?? 0) * 0.18 - (stats.maintenance ?? 0) * 0.25), 4, 96);
-  const costMultiplier = clamp(1 + ((stats.cost ?? 0) + tierWeight * 6 + Math.max(0, stats.mass ?? 0) * 0.25) / 100, 0.55, 2.6);
+  const reliability = clamp(Math.round(42 + (nodeStats.reliability ?? 0) + (connectionMetrics.summary.reliability ?? 0) + (nodeStats.powerStability ?? 0) * 0.35 - (nodeStats.defectRisk ?? 0) * 0.6 - Math.max(0, nodeStats.heat ?? 0) * 0.18 - (nodeStats.maintenance ?? 0) * 0.25), 4, 96);
+  const costMultiplier = clamp(1 + ((nodeStats.cost ?? 0) + (connectionMetrics.summary.cost ?? 0) + tierWeight * 6 + Math.max(0, nodeStats.mass ?? 0) * 0.25) / 100, 0.55, 2.6);
   const saleMultiplier = clamp(1 + (quality - 50) / 110 + tierWeight / 35, 0.5, 2.8);
 
   return {
@@ -152,13 +163,14 @@ export function calculateBlueprintDesign(blueprint) {
     licensePrice: Math.round(typeBaseSale * saleMultiplier * 2.8),
     bill: billWithNodePressure(blueprint.baseBill, stats, blueprint.type),
     chainStats: stats,
+    connectionMetrics,
     layoutFootprint: layout.footprint,
     layoutTemplateId: blueprint.layoutTemplateId,
     placements: blueprint.placements ?? [],
     connections: blueprint.connections ?? [],
     nodeIds: blueprint.nodeIds,
     description: blueprint.description,
-    defectRiskModifier: Math.round((stats.defectRisk ?? 0) - (stats.reliability ?? 0) * 0.15 + Math.max(0, stats.maintenance ?? 0) * 0.12),
+    defectRiskModifier: Math.round((nodeStats.defectRisk ?? 0) + (connectionMetrics.summary.defectRisk ?? 0) - ((nodeStats.reliability ?? 0) + (connectionMetrics.summary.reliability ?? 0)) * 0.15 + Math.max(0, (nodeStats.maintenance ?? 0)) * 0.12),
   };
 }
 
