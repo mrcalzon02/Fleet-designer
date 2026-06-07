@@ -5,6 +5,83 @@ function seedFromText(text) {
   return [...text].reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
+function titleCase(value) {
+  return `${value ?? 'utility'}`.replace(/(^|\s|-)([a-z])/g, (match) => match.toUpperCase()).replace(/-/g, ' ');
+}
+
+function preferredListingType(rival) {
+  if ((rival.preferredVehicleClasses ?? []).some((item) => item.includes('vessel') || item.includes('craft') || item.includes('hauler') || item.includes('runner'))) return 'vessel';
+  if ((rival.preferredModuleCategories ?? []).length > 0) return 'module';
+  return 'component';
+}
+
+function listingBasePrice(type, techLevel) {
+  const base = type === 'vessel' ? 2600000 : type === 'module' ? 980000 : 420000;
+  return Math.round(base * (1 + Math.max(0, techLevel - 1) * 0.18));
+}
+
+function pricingMultiplier(strategy) {
+  if (`${strategy}`.includes('premium')) return 1.35;
+  if (`${strategy}`.includes('underbid')) return 0.82;
+  if (`${strategy}`.includes('discount')) return 0.72;
+  if (`${strategy}`.includes('value')) return 0.95;
+  if (`${strategy}`.includes('performance')) return 1.18;
+  return 1;
+}
+
+function listingNameForRival(rival) {
+  const category = rival.preferredModuleCategories?.[0] ?? 'utility';
+  const vehicle = rival.preferredVehicleClasses?.[0] ?? 'utility vessel';
+  const type = preferredListingType(rival);
+  const mark = `TL-${rival.techLevel}`;
+  if (type === 'vessel') return `${rival.name.split(' ')[0]} ${titleCase(vehicle)} ${mark}`;
+  if (type === 'module') return `${rival.name.split(' ')[0]} ${titleCase(category)} Module ${mark}`;
+  return `${rival.name.split(' ')[0]} ${titleCase(category)} Component ${mark}`;
+}
+
+function buildRivalListing(rival, cycle) {
+  const type = preferredListingType(rival);
+  const quality = Math.max(35, Math.min(92, 44 + (rival.techLevel ?? 1) * 5 + Math.round((rival.researchSpeedIndex ?? 1) * 2)));
+  const reliability = Math.max(30, Math.min(90, 46 + (rival.techLevel ?? 1) * 4 - Math.round((rival.aggressionIndex ?? 0.5) * 2)));
+  const price = Math.round(listingBasePrice(type, rival.techLevel ?? 1) * pricingMultiplier(rival.pricingStrategy));
+  return {
+    id: `mk-rival-${rival.id}-${cycle}-${rival.techLevel}`,
+    seller: rival.name,
+    sellerId: rival.id,
+    designName: listingNameForRival(rival),
+    type,
+    price,
+    license: true,
+    source: 'rival-generated',
+    quality,
+    reliability,
+    category: rival.preferredModuleCategories?.[0] ?? 'utility',
+    expiresCycle: cycle + 6,
+  };
+}
+
+function hasRecentListing(next, rival) {
+  const cycle = next.company?.cycle ?? 0;
+  return (next.marketListings ?? []).some((listing) => listing.sellerId === rival.id && (listing.expiresCycle ?? cycle) >= cycle);
+}
+
+function pruneExpiredRivalListings(next) {
+  const cycle = next.company?.cycle ?? 0;
+  next.marketListings = (next.marketListings ?? []).filter((listing) => listing.source !== 'rival-generated' || (listing.expiresCycle ?? cycle) >= cycle);
+}
+
+function maybeGenerateRivalListing(next, rival) {
+  if (hasRecentListing(next, rival)) return;
+  const offerChance = Math.min(0.45, 0.08 + (rival.marketShare ?? 1) / 100 + (rival.contractBidAggression ?? 0.5) * 0.04);
+  if (Math.random() > offerChance) return;
+
+  const listing = buildRivalListing(rival, next.company.cycle);
+  next.marketListings.unshift(listing);
+  next.marketListings = next.marketListings.slice(0, 18);
+  rival.lastAction = `Posted license offer: ${listing.designName}.`;
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Rival market - ${rival.name} listed ${listing.designName} license for CR ${listing.price.toLocaleString('en-US')}.`);
+}
+
 export function instantiateRivalCompany(template, index = 0, difficultyId = 'normal') {
   const seed = seedFromText(template.id) + index * 37;
   const aggressionPressure = difficultyMultiplier({ company: { difficultyId } }, 'rivalAggression');
@@ -53,6 +130,7 @@ export function advanceRivalCompanies(next) {
     next.rivalCompanies = refreshRivalCompanyState(next);
   }
 
+  pruneExpiredRivalListings(next);
   const marketPressure = difficultyMultiplier(next, 'rivalMarketPressure');
   const researchPressure = difficultyMultiplier(next, 'rivalResearchSpeed');
 
@@ -71,6 +149,8 @@ export function advanceRivalCompanies(next) {
       rival.marketShare = Math.max(1, Math.min(45, (rival.marketShare ?? 1) + shareDelta));
       rival.lastAction = shareDelta ? 'Captured marginal contract visibility.' : 'Maintained current market posture.';
     }
+
+    maybeGenerateRivalListing(next, rival);
   }
 }
 
