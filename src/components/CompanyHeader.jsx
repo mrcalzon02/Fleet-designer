@@ -1,4 +1,5 @@
 import { Factory, FlaskConical, PackageSearch, Radar, Ship, TrendingUp } from 'lucide-react';
+import { calculateOperatingBurn } from '../game/difficultyEffects.js';
 import { formatCredits } from '../game/simulation.js';
 
 const departmentCards = [
@@ -10,7 +11,8 @@ const departmentCards = [
   { title: 'Vessel Builder', icon: Ship, note: 'Vessel designs are economic products.' },
 ];
 
-export function CompanyHeader({ company, activeWorkUnits, warehouseUsed, onAdvanceCycle }) {
+export function CompanyHeader({ company, activeWorkUnits, warehouseUsed, onAdvanceCycle, game }) {
+  const effectiveBurn = game ? calculateOperatingBurn(game) : company.effectiveBurnRate ?? company.burnRate;
   return (
     <>
       <section className="hero-panel">
@@ -32,7 +34,8 @@ export function CompanyHeader({ company, activeWorkUnits, warehouseUsed, onAdvan
           <span>Cash: {formatCredits(company.cash)}</span>
           <span>Reputation: {company.reputation}</span>
           <span>Cycle: {company.cycle}</span>
-          <span>Burn: {formatCredits(company.burnRate)} / cycle</span>
+          <span>Difficulty: {company.difficultyName ?? 'Normal'}</span>
+          <span>Operating Burn: {formatCredits(effectiveBurn)} / cycle</span>
           <span>Factory: {activeWorkUnits} work units queued</span>
           <span>Warehouse: {warehouseUsed}/{company.warehouseCapacity}</span>
         </div>
