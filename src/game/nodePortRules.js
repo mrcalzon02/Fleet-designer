@@ -95,12 +95,20 @@ export const nodePortMaps = {
 };
 
 const facingTurns = { north: 3, east: 0, south: 1, west: 2 };
+const sideOrder = ['north', 'east', 'south', 'west'];
 
 function shapeSize(shape) {
   return {
     width: Math.max(...(shape ?? ['']).map((row) => row.length)),
     height: (shape ?? []).length,
   };
+}
+
+export function rotateSide(side, facing = 'east') {
+  const turns = facingTurns[facing] ?? 0;
+  const index = sideOrder.indexOf(side);
+  if (index < 0) return side;
+  return sideOrder[(index + turns) % sideOrder.length];
 }
 
 export function rotatePoint(point, shape, facing = 'east') {
@@ -129,6 +137,7 @@ export function portsForNode(node, facing = 'east') {
   return authored.map((port) => ({
     ...port,
     ...rotatePoint(port, node.shape, facing),
+    side: rotateSide(port.side, facing),
     facing,
   }));
 }
@@ -138,4 +147,15 @@ export function portForNode(node, kind, facing = 'east', portRef = 0) {
   if (candidates.length === 0) return null;
   if (typeof portRef === 'string') return candidates.find((port) => port.id === portRef) ?? candidates[0];
   return candidates[Math.abs(portRef ?? 0) % candidates.length] ?? candidates[0];
+}
+
+export function exactPortForNode(node, kind, facing = 'east', portRef = 0) {
+  const candidates = portsForNode(node, facing).filter((port) => port.kind === kind);
+  if (candidates.length === 0) return { port: null, found: false, reason: `no ${kind} ports` };
+  if (typeof portRef === 'string') {
+    const exact = candidates.find((port) => port.id === portRef);
+    return { port: exact ?? null, found: Boolean(exact), reason: exact ? null : `missing ${kind} port ${portRef}` };
+  }
+  const port = candidates[Math.abs(portRef ?? 0) % candidates.length] ?? candidates[0];
+  return { port, found: Boolean(port), reason: port ? null : `missing ${kind} port index ${portRef}` };
 }
