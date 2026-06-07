@@ -1,3 +1,5 @@
+import { getDifficultyProfile } from './difficultyProfiles.js';
+
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 export const defaultRefineryRecipes = [
@@ -31,6 +33,10 @@ function normalizeQuantity(value, fallback = 1) {
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) return fallback;
   return Math.max(1, parsed);
+}
+
+function difficultyMultiplier(state, key) {
+  return getDifficultyProfile(state.company?.difficultyId ?? 'normal').multipliers[key] ?? 1;
 }
 
 function materialLabel(state, material) {
@@ -67,7 +73,7 @@ export function buySpotMaterial(state, material, quantity = 1) {
   const purchaseQuantity = normalizeQuantity(quantity);
   if (!commodity) return next;
 
-  const cost = commodity.spotPrice * purchaseQuantity;
+  const cost = Math.round(commodity.spotPrice * purchaseQuantity * difficultyMultiplier(next, 'rawSupplyCost'));
   if (next.company.cash < cost) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Spot purchase failed. Insufficient capital for ${materialLabel(next, material)}.`);
     return next;
@@ -75,7 +81,7 @@ export function buySpotMaterial(state, material, quantity = 1) {
 
   next.company.cash -= cost;
   next.inventory[material] = (next.inventory[material] ?? 0) + purchaseQuantity;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Bought ${purchaseQuantity} x ${materialLabel(next, material)} on the spot market for ${formatCredits(cost)}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Bought ${purchaseQuantity} x ${materialLabel(next, material)} on the spot market for ${formatCredits(cost)} at ${next.company.difficultyName ?? 'Normal'} pressure.`);
   return next;
 }
 
@@ -96,7 +102,7 @@ export function queueRefineryJob(state, recipeId, quantity = 1) {
   const jobQuantity = normalizeQuantity(quantity);
   if (!recipe) return next;
 
-  const totalCost = recipe.cashCost * jobQuantity;
+  const totalCost = Math.round(recipe.cashCost * jobQuantity * difficultyMultiplier(next, 'refinedSupplyCost'));
   if (next.company.cash < totalCost) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Refinery job blocked. Insufficient capital for ${recipe.name}.`);
     return next;
@@ -119,10 +125,10 @@ export function queueRefineryJob(state, recipeId, quantity = 1) {
     required: recipe.workRequired * jobQuantity,
     input: { ...recipe.input },
     output: { ...recipe.output },
-    cashCost: recipe.cashCost,
+    cashCost: Math.round(totalCost / jobQuantity),
     status: 'queued',
   });
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued refinery job ${recipe.name} x ${jobQuantity}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued refinery job ${recipe.name} x ${jobQuantity} for ${formatCredits(totalCost)}.`);
   return next;
 }
 
@@ -152,7 +158,7 @@ export function processSupplyContracts(next) {
   for (const contract of next.supplyContracts) {
     if (!contract.active) continue;
 
-    const cost = contract.contractPrice * contract.quantityPerCycle;
+    const cost = Math.round(contract.contractPrice * contract.quantityPerCycle * difficultyMultiplier(next, 'supplierContractCost'));
     if (next.company.cash < cost) {
       contract.active = false;
       contract.remainingCycles = 0;
@@ -166,9 +172,9 @@ export function processSupplyContracts(next) {
 
     if (delivered) {
       next.inventory[contract.material] = (next.inventory[contract.material] ?? 0) + contract.quantityPerCycle;
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: ${contract.supplier} delivered ${contract.quantityPerCycle} x ${materialLabel(next, contract.material)}.`);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: ${contract.supplier} delivered ${contract.quantityPerCycle} x ${materialLabel(next, contract.material)} for ${formatCredits(cost)}.`);
     } else {
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: ${contract.supplier} missed delivery for ${materialLabel(next, contract.material)}.`);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: ${contract.supplier} missed delivery for ${materialLabel(next, contract.material)}. Contract charge still applied: ${formatCredits(cost)}.`);
     }
 
     if (contract.remainingCycles <= 0) {
