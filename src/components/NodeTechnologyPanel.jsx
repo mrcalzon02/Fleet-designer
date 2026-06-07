@@ -25,12 +25,16 @@ function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
   if (!template) return null;
   const placed = new Map(placedCells.map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
   const routed = new Map();
+  const blockedRouteCells = new Set();
   const ports = new Map();
 
   for (const report of connectionMetrics?.reports ?? []) {
     for (const cell of report.route ?? []) {
       const key = `${cell.x},${cell.y}`;
       routed.set(key, Math.max(routed.get(key) ?? 0, 1));
+    }
+    for (const obstruction of report.obstructions ?? []) {
+      blockedRouteCells.add(obstruction.key);
     }
   }
 
@@ -52,9 +56,10 @@ function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
             const routeCount = routed.get(key) ?? 0;
             const portAnchor = ports.get(key);
             const portRole = portAnchor?.role;
+            const obstructed = blockedRouteCells.has(key);
             return (
-              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${routeCount ? 'routed' : ''} ${routeCount > 1 ? 'congested' : ''} ${placedNodeId ? 'occupied' : ''} ${portRole ? `port-${portRole}` : ''}`} key={`${rowIndex}-${cellIndex}`} title={portAnchor ? `${portAnchor.portId} ${portRole} ${portAnchor.facing}` : placedNodeId ?? (routeCount ? `route x${routeCount}` : '')}>
-                {portRole === 'output' ? 'O' : portRole === 'input' ? 'I' : placedNodeId ? nodeGlyph(placedNodeId) : routeCount > 1 ? '╳' : routeCount ? '─' : cell === 'X' ? '■' : '·'}
+              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${routeCount ? 'routed' : ''} ${routeCount > 1 ? 'congested' : ''} ${obstructed ? 'obstructed' : ''} ${placedNodeId ? 'occupied' : ''} ${portRole ? `port-${portRole}` : ''}`} key={`${rowIndex}-${cellIndex}`} title={portAnchor ? `${portAnchor.portId} ${portRole} ${portAnchor.facing}` : placedNodeId ?? (routeCount ? `route x${routeCount}` : '')}>
+                {portRole === 'output' ? 'O' : portRole === 'input' ? 'I' : placedNodeId ? nodeGlyph(placedNodeId) : obstructed ? '!' : routeCount > 1 ? '╳' : routeCount ? '─' : cell === 'X' ? '■' : '·'}
               </span>
             );
           })}
@@ -68,11 +73,14 @@ function ConnectionReport({ reports }) {
   if (!reports || reports.length === 0) return <p>Connections: none.</p>;
   return (
     <div className="connection-report">
-      {reports.map((report, index) => (
-        <span className={`connection-link ${report.classification}`} key={`${report.from}-${report.to}-${index}`}>
-          {nodeGlyph(report.from)}:{report.fromAnchor?.portId ?? report.fromPort ?? '?'}→{nodeGlyph(report.to)}:{report.toAnchor?.portId ?? report.toPort ?? '?'} // {report.classification} // d{report.distance ?? 'x'} // route {(report.route ?? []).length} // {formatStats(report.modifier)}
-        </span>
-      ))}
+      {reports.map((report, index) => {
+        const obstructionCount = (report.obstructions ?? []).length;
+        return (
+          <span className={`connection-link ${report.classification} ${report.sideMismatch ? 'mismatch' : ''} ${obstructionCount ? 'obstructed' : ''}`} key={`${report.from}-${report.to}-${index}`}>
+            {nodeGlyph(report.from)}:{report.fromAnchor?.portId ?? report.fromPort ?? '?'}→{nodeGlyph(report.to)}:{report.toAnchor?.portId ?? report.toPort ?? '?'} // {report.classification} // d{report.distance ?? 'x'} // route {(report.route ?? []).length} // blocked {obstructionCount} // {report.sideMismatch ? 'side mismatch // ' : ''}{formatStats(report.modifier)}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -118,7 +126,7 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
       <p>Placements: {(blueprint.placements ?? []).map((placement) => `${nodeGlyph(placement.nodeId)} ${placementLabel(blueprint.placements ?? [], placement.nodeId)}`).join(' // ')}.</p>
       <TemplateGrid template={template} placedCells={placedCells} connectionMetrics={design.connectionMetrics} />
       <ConnectionReport reports={reports} />
-      <p>Port anchors: O = output, I = input. Routes now use authored port IDs where available.</p>
+      <p>Port anchors: O = output, I = input. Obstructed routes are marked with ! and side mismatches appear in the link report.</p>
       <p>Route congestion: {design.connectionMetrics?.congestion?.congestionPenalty ?? 0} penalty across {(design.connectionMetrics?.congestion?.congestedCells ?? []).length} congested cells.</p>
       <p>Layout modifiers: {formatStats(design.connectionMetrics?.summary ?? {})}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
