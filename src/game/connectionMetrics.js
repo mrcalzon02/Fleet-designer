@@ -24,15 +24,35 @@ function cellsForNode(blueprint, nodeId) {
   return placedCellsForBlueprint(blueprint).filter((cell) => cell.nodeId === nodeId);
 }
 
-function minDistance(fromCells, toCells) {
-  if (fromCells.length === 0 || toCells.length === 0) return null;
-  let best = Number.POSITIVE_INFINITY;
+function bestCellPair(fromCells, toCells) {
+  if (fromCells.length === 0 || toCells.length === 0) return { fromCell: null, toCell: null, distance: null };
+  let best = { fromCell: null, toCell: null, distance: Number.POSITIVE_INFINITY };
   for (const fromCell of fromCells) {
     for (const toCell of toCells) {
-      best = Math.min(best, Math.abs(fromCell.x - toCell.x) + Math.abs(fromCell.y - toCell.y));
+      const distance = Math.abs(fromCell.x - toCell.x) + Math.abs(fromCell.y - toCell.y);
+      if (distance < best.distance) best = { fromCell, toCell, distance };
     }
   }
   return best;
+}
+
+function routeBetweenCells(fromCell, toCell) {
+  if (!fromCell || !toCell) return [];
+  const route = [];
+  let x = fromCell.x;
+  let y = fromCell.y;
+
+  while (x !== toCell.x) {
+    x += x < toCell.x ? 1 : -1;
+    route.push({ x, y });
+  }
+
+  while (y !== toCell.y) {
+    y += y < toCell.y ? 1 : -1;
+    route.push({ x, y });
+  }
+
+  return route;
 }
 
 export function classifyConnectionDistance(distance) {
@@ -57,14 +77,42 @@ function addModifier(summary, modifier) {
   }
 }
 
+function addCongestion(summary, reports) {
+  const routeUse = new Map();
+  for (const report of reports) {
+    for (const cell of report.route ?? []) {
+      const key = `${cell.x},${cell.y}`;
+      routeUse.set(key, (routeUse.get(key) ?? 0) + 1);
+    }
+  }
+
+  const congestedCells = [...routeUse.entries()].filter(([, count]) => count > 1);
+  const congestionPenalty = congestedCells.reduce((sum, [, count]) => sum + count - 1, 0);
+  if (congestionPenalty > 0) {
+    summary.reliability -= congestionPenalty;
+    summary.efficiency -= congestionPenalty;
+    summary.heat += congestionPenalty * 2;
+    summary.defectRisk += congestionPenalty * 2;
+    summary.cost += congestionPenalty;
+  }
+
+  return {
+    routeUse: [...routeUse.entries()].map(([key, count]) => ({ key, count })),
+    congestedCells: congestedCells.map(([key, count]) => ({ key, count })),
+    congestionPenalty,
+  };
+}
+
 export function calculateConnectionMetrics(blueprint) {
   const summary = { reliability: 0, efficiency: 0, heat: 0, defectRisk: 0, cost: 0 };
   const reports = (blueprint.connections ?? []).map((connection) => {
-    const distance = minDistance(cellsForNode(blueprint, connection.from), cellsForNode(blueprint, connection.to));
-    const classification = classifyConnectionDistance(distance);
+    const pair = bestCellPair(cellsForNode(blueprint, connection.from), cellsForNode(blueprint, connection.to));
+    const classification = classifyConnectionDistance(pair.distance);
     const modifier = modifiersForClass(classification);
+    const route = routeBetweenCells(pair.fromCell, pair.toCell);
     addModifier(summary, modifier);
-    return { ...connection, distance, classification, modifier };
+    return { ...connection, distance: pair.distance, classification, modifier, route, fromCell: pair.fromCell, toCell: pair.toCell };
   });
-  return { reports, summary };
+  const congestion = addCongestion(summary, reports);
+  return { reports, summary, congestion };
 }
