@@ -1,7 +1,12 @@
 import { componentNodeLibrary } from './nodeLibrary.js';
+import { portForNode } from './nodePortRules.js';
 
 function nodeById(nodeId) {
   return componentNodeLibrary.find((node) => node.id === nodeId);
+}
+
+function placementForNode(blueprint, nodeId) {
+  return (blueprint.placements ?? []).find((placement) => placement.nodeId === nodeId);
 }
 
 export function placedCellsForBlueprint(blueprint) {
@@ -24,7 +29,7 @@ function cellsForNode(blueprint, nodeId) {
   return placedCellsForBlueprint(blueprint).filter((cell) => cell.nodeId === nodeId);
 }
 
-function pickPortAnchor(blueprint, nodeId, direction, portIndex = 0) {
+function edgeFallbackAnchor(blueprint, nodeId, direction, portIndex = 0) {
   const cells = cellsForNode(blueprint, nodeId);
   if (cells.length === 0) return null;
 
@@ -37,7 +42,27 @@ function pickPortAnchor(blueprint, nodeId, direction, portIndex = 0) {
     .sort((a, b) => a.y - b.y || a.x - b.x);
 
   const selected = candidates[Math.abs(portIndex) % candidates.length] ?? candidates[0];
-  return selected ? { ...selected, direction } : null;
+  return selected ? { ...selected, direction, portId: `${direction}-fallback-${portIndex}`, source: 'edge-fallback' } : null;
+}
+
+function pickPortAnchor(blueprint, nodeId, direction, portRef = 0) {
+  const node = nodeById(nodeId);
+  const placement = placementForNode(blueprint, nodeId);
+  if (!node || !placement) return null;
+  const kind = direction === 'output' ? 'output' : 'input';
+  const authoredPort = portForNode(node, kind, placement.facing ?? 'east', portRef);
+  if (!authoredPort) return edgeFallbackAnchor(blueprint, nodeId, direction, portRef);
+  return {
+    nodeId,
+    x: placement.x + authoredPort.x,
+    y: placement.y + authoredPort.y,
+    direction,
+    role: kind,
+    portId: authoredPort.id,
+    side: authoredPort.side,
+    facing: placement.facing ?? 'east',
+    source: 'authored-port',
+  };
 }
 
 function distanceBetween(fromCell, toCell) {
