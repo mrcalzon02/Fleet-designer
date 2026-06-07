@@ -73,6 +73,14 @@ function salePriceForLicensedListing(listing, cost) {
   return Math.round(Math.max(base, cost * 1.55) * reliabilityPressure);
 }
 
+export function designMeetsContractPressure(design, contract) {
+  if (!design || !contract) return false;
+  if (design.type !== contract.requiredType) return false;
+  if ((design.quality ?? 0) < (contract.minQuality ?? 0)) return false;
+  if ((design.reliability ?? 0) < (contract.minReliability ?? 0)) return false;
+  return true;
+}
+
 function buildProductionRun(state, design, quantity, purpose, options = {}) {
   const normalizedQuantity = normalizeQuantity(quantity);
   const complexity = design.type === 'vessel' ? 4 : design.type === 'module' ? 3 : 2;
@@ -150,8 +158,8 @@ export function acceptContract(state, contractId, designId) {
 
   if (!contract || !design) return next;
   if (contract.status !== 'open') return next;
-  if (design.type !== contract.requiredType) {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: ${design.name} cannot satisfy ${contract.title}.`);
+  if (!designMeetsContractPressure(design, contract)) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: ${design.name} cannot satisfy ${contract.title}. Required type ${contract.requiredType}, quality ${contract.minQuality ?? 0}, reliability ${contract.minReliability ?? 0}.`);
     return next;
   }
 
@@ -161,7 +169,8 @@ export function acceptContract(state, contractId, designId) {
   contract.stockLotId = null;
   contract.deliveredQuantity = 0;
   contract.earnedReward = 0;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Accepted ${contract.title} for ${contract.client}. Production still must be queued.`);
+  contract.acceptedDeadline = contract.effectiveDeadline ?? contract.deadline;
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Accepted ${contract.title} for ${contract.client}. Production still must be queued.${contract.contestedBy ? ` Rival pressure from ${contract.contestedBy} remains on the clock.` : ''}`);
   return next;
 }
 
@@ -452,13 +461,14 @@ function completeProduction(next, run) {
 function resolveContractDeadlines(next) {
   for (const contract of next.contracts) {
     if (contract.status !== 'accepted') continue;
-    if (next.company.cycle > contract.deadline) {
+    const deadline = contract.acceptedDeadline ?? contract.effectiveDeadline ?? contract.deadline;
+    if (next.company.cycle > deadline) {
       const completionRatio = Math.min(1, (contract.deliveredQuantity ?? 0) / contract.quantity);
       const adjustedPenalty = Math.round(contract.penalty * (1 - completionRatio));
       contract.status = 'failed';
       next.company.cash -= adjustedPenalty;
       next.company.reputation -= adjustedPenalty > 0 ? 5 : 1;
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: Failed ${contract.title}. Delivered ${contract.deliveredQuantity ?? 0}/${contract.quantity}. Penalty ${currency(adjustedPenalty)}.`);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: Failed ${contract.title}. Delivered ${contract.deliveredQuantity ?? 0}/${contract.quantity}. Deadline C${deadline}. Penalty ${currency(adjustedPenalty)}.`);
     }
   }
 }
