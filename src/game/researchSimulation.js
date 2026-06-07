@@ -1,9 +1,14 @@
+import { getDifficultyProfile } from './difficultyProfiles.js';
 import { technologyTree } from './nodeLibrary.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function projectEngineers(state, projectId) {
   return state.engineers.filter((engineer) => engineer.assignedProjectId === projectId);
+}
+
+function researchTimeMultiplier(state) {
+  return getDifficultyProfile(state.company?.difficultyId ?? 'normal').multipliers.researchTime ?? 1;
 }
 
 function unlockTechnology(next, techId) {
@@ -35,19 +40,21 @@ export function calculateResearchProgress(state, project) {
   const assigned = projectEngineers(state, project.id);
   if (assigned.length === 0) return 0;
 
-  return assigned.reduce((sum, engineer) => {
+  const rawProgress = assigned.reduce((sum, engineer) => {
     const specialtyMatch = engineer.specialty === project.discipline ? 4 : 0;
     const moraleBonus = engineer.morale >= 80 ? 2 : engineer.morale < 50 ? -1 : 0;
     const fatiguePenalty = engineer.fatigue >= 75 ? 4 : engineer.fatigue >= 50 ? 2 : 0;
     return sum + Math.max(1, engineer.skill * 5 + specialtyMatch + moraleBonus - fatiguePenalty);
   }, 0);
+
+  return Math.max(1, Math.round(rawProgress / researchTimeMultiplier(state)));
 }
 
 export function researchStaffSummary(state, projectId) {
-  const assigned = projectEngineers(state, projectId);
   return {
-    assigned,
+    assigned: projectEngineers(state, projectId),
     progressPerCycle: calculateResearchProgress(state, state.research.find((project) => project.id === projectId) ?? {}),
+    difficultyTimeMultiplier: researchTimeMultiplier(state),
   };
 }
 
