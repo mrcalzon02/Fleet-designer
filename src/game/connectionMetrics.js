@@ -1,6 +1,7 @@
 import { templateById } from './layoutTemplates.js';
 import { componentNodeLibrary } from './nodeLibrary.js';
 import { exactPortForNode, portForNode } from './nodePortRules.js';
+import { findLegalRoute } from './pathRouting.js';
 
 function nodeById(nodeId) {
   return componentNodeLibrary.find((node) => node.id === nodeId);
@@ -79,32 +80,28 @@ function distanceBetween(fromCell, toCell) {
   return Math.abs(fromCell.x - toCell.x) + Math.abs(fromCell.y - toCell.y);
 }
 
-function routeBetweenCells(fromCell, toCell) {
-  if (!fromCell || !toCell) return [];
-  const route = [];
-  let x = fromCell.x;
-  let y = fromCell.y;
-
-  while (x !== toCell.x) {
-    x += x < toCell.x ? 1 : -1;
-    route.push({ x, y });
-  }
-
-  while (y !== toCell.y) {
-    y += y < toCell.y ? 1 : -1;
-    route.push({ x, y });
-  }
-
-  return route;
-}
-
 function templateAllows(blueprint, x, y) {
   const template = templateById(blueprint.layoutTemplateId, blueprint.type);
   return template?.grid?.[y]?.[x] === 'X';
 }
 
+function occupiedMapForBlueprint(blueprint) {
+  return new Map(placedCellsForBlueprint(blueprint).map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
+}
+
+function routeForConnection(blueprint, fromAnchor, toAnchor, connection) {
+  return findLegalRoute({
+    template: templateById(blueprint.layoutTemplateId, blueprint.type),
+    occupied: occupiedMapForBlueprint(blueprint),
+    fromCell: fromAnchor,
+    toCell: toAnchor,
+    fromNodeId: connection.from,
+    toNodeId: connection.to,
+  });
+}
+
 function routeObstructions(blueprint, report) {
-  const occupied = new Map(placedCellsForBlueprint(blueprint).map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
+  const occupied = occupiedMapForBlueprint(blueprint);
   const problems = [];
   for (const cell of report.route ?? []) {
     const key = `${cell.x},${cell.y}`;
@@ -189,13 +186,14 @@ export function calculateConnectionMetrics(blueprint) {
     const distance = distanceBetween(fromAnchor, toAnchor);
     const classification = classifyConnectionDistance(distance);
     const modifier = modifiersForClass(classification);
-    const route = routeBetweenCells(fromAnchor, toAnchor);
-    const report = { ...connection, distance, classification, modifier, route, fromCell: fromAnchor, toCell: toAnchor, fromAnchor, toAnchor };
+    const routed = routeForConnection(blueprint, fromAnchor, toAnchor, connection);
+    const report = { ...connection, distance, classification, modifier, route: routed.route, routeMode: routed.mode, routeFound: routed.found, fromCell: fromAnchor, toCell: toAnchor, fromAnchor, toAnchor };
     report.obstructions = routeObstructions(blueprint, report);
     report.sideMismatch = sideMismatch(fromAnchor, toAnchor);
+    if (!routed.found) issues.push(`${connection.from}->${connection.to}: no clean legal route`);
     if (report.sideMismatch) issues.push(`${connection.from}->${connection.to}: port side mismatch`);
     addModifier(summary, modifier);
-    addPenalty(summary, report.obstructions.length + (report.sideMismatch ? 2 : 0));
+    addPenalty(summary, report.obstructions.length + (report.sideMismatch ? 2 : 0) + (!routed.found ? 3 : 0));
     if (fromAnchor) portAnchors.push({ ...fromAnchor, role: 'output', nodeId: connection.from });
     if (toAnchor) portAnchors.push({ ...toAnchor, role: 'input', nodeId: connection.to });
     return report;
