@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { autoFillHullTemplate, calculateVehicleAssembly, compatibleModulesForSlot, hullSlotTemplates, inferModuleCategory, moduleCategories, slotCellsForTemplate } from '../game/vehicleSlotSystem.js';
+import { autoFillHullTemplate, availableModuleDesigns, calculateVehicleAssembly, compatibleModulesForSlot, hullSlotTemplates, inferModuleCategory, moduleCategories, slotCellsForTemplate } from '../game/vehicleSlotSystem.js';
 
 function formatStats(stats) {
   return Object.entries(stats ?? {}).map(([key, value]) => `${key} ${value >= 0 ? '+' : ''}${value}`).join(' // ');
@@ -10,6 +10,10 @@ function slotCodeClass(code) {
   if (code === 'E') return 'slot-engineering';
   if (code === 'S') return 'slot-structure';
   return 'slot-utility';
+}
+
+function sourceLabel(design) {
+  return design.rights === 'external-purchase' ? `open market // ${design.supplier}` : 'owned blueprint';
 }
 
 function assignmentsForTemplate(assignmentsByTemplate, templateId) {
@@ -36,11 +40,11 @@ function HullGrid({ assembly, selectedSlotId, onSelectSlot }) {
             const selected = slot?.id === selectedSlotId;
             return (
               <button
-                className={`hull-cell ${code === '.' ? 'empty' : slotCodeClass(code)} ${filledSlot ? 'filled' : ''} ${filledSlot && !filledSlot.compatible ? 'invalid' : ''} ${selected ? 'selected' : ''}`}
+                className={`hull-cell ${code === '.' ? 'empty' : slotCodeClass(code)} ${filledSlot ? 'filled' : ''} ${filledSlot?.external ? 'external' : ''} ${filledSlot && !filledSlot.compatible ? 'invalid' : ''} ${selected ? 'selected' : ''}`}
                 disabled={!slot}
                 key={key}
                 onClick={() => slot && onSelectSlot(slot.id)}
-                title={filledSlot ? `${filledSlot.design.name} // ${filledSlot.category}` : code === '.' ? 'No slot' : `${slot.label}: ${slot.allowedCategories.join(', ')}`}
+                title={filledSlot ? `${filledSlot.design.name} // ${filledSlot.category} // ${filledSlot.external ? 'open market' : 'owned'}` : code === '.' ? 'No slot' : `${slot.label}: ${slot.allowedCategories.join(', ')}`}
                 type="button"
               >
                 {filledSlot ? filledSlot.category.slice(0, 2).toUpperCase() : code === '.' ? '·' : code}
@@ -68,17 +72,17 @@ function CategoryLegend() {
 }
 
 function ModuleCatalog({ designs }) {
-  const modules = designs.filter((design) => design.type === 'module');
+  const modules = availableModuleDesigns(designs, true);
   return (
     <div className="stack-list compact-list">
       {modules.map((design) => (
-        <div className="data-card" key={design.id}>
+        <div className={`data-card ${design.rights === 'external-purchase' ? 'paused' : ''}`} key={design.id}>
           <strong>{design.name}</strong>
-          <small>{inferModuleCategory(design)} // quality {design.quality} // reliability {design.reliability}</small>
-          <p>Cost CR {design.cost.toLocaleString('en-US')} // Sale CR {design.salePrice.toLocaleString('en-US')}</p>
+          <small>{inferModuleCategory(design)} // {sourceLabel(design)} // quality {design.quality} // reliability {design.reliability}</small>
+          <p>Acquisition CR {design.cost.toLocaleString('en-US')}.</p>
         </div>
       ))}
-      {modules.length === 0 && <p>No module designs available yet. Create or license module designs to fill vehicle slots.</p>}
+      {modules.length === 0 && <p>No module designs available yet. Open Market fallback modules should normally be available.</p>}
     </div>
   );
 }
@@ -86,24 +90,24 @@ function ModuleCatalog({ designs }) {
 function SlotEditor({ game, template, selectedSlotId, assignment, onInstallModule, onClearSlot }) {
   const selectedSlot = slotCellsForTemplate(template).find((slot) => slot.id === selectedSlotId);
   if (!selectedSlot) return <p>Select a valid hull slot to inspect compatible modules.</p>;
-  const compatibleModules = compatibleModulesForSlot(game.designs, selectedSlot);
-  const installed = assignment ? game.designs.find((design) => design.id === assignment.designId) : null;
+  const compatibleModules = compatibleModulesForSlot(game.designs, selectedSlot, true);
+  const installed = assignment ? availableModuleDesigns(game.designs, true).find((design) => design.id === assignment.designId) : null;
 
   return (
     <div className="slot-editor">
       <strong>{selectedSlot.label} [{selectedSlot.x},{selectedSlot.y}]</strong>
       <small>Allowed: {selectedSlot.allowedCategories.join(', ')}</small>
-      <p>Installed: {installed ? `${installed.name} // ${inferModuleCategory(installed)}` : 'empty'}.</p>
+      <p>Installed: {installed ? `${installed.name} // ${inferModuleCategory(installed)} // ${sourceLabel(installed)}` : 'empty'}.</p>
       <div className="button-row">
         <button onClick={() => onClearSlot(selectedSlot.id)} disabled={!installed} type="button">Clear Slot</button>
       </div>
       <div className="stack-list compact-list">
-        {compatibleModules.map(({ design, category }) => (
-          <div className="data-card" key={design.id}>
+        {compatibleModules.map(({ design, category, external }) => (
+          <div className={`data-card ${external ? 'paused' : ''}`} key={design.id}>
             <strong>{design.name}</strong>
-            <small>{category} // quality {design.quality} // reliability {design.reliability}</small>
-            <p>Install into {selectedSlot.label}. Cost CR {design.cost.toLocaleString('en-US')}.</p>
-            <button onClick={() => onInstallModule(selectedSlot.id, design.id)} type="button">Install Module</button>
+            <small>{category} // {sourceLabel(design)} // quality {design.quality} // reliability {design.reliability}</small>
+            <p>Install into {selectedSlot.label}. Acquisition CR {design.cost.toLocaleString('en-US')}.</p>
+            <button onClick={() => onInstallModule(selectedSlot.id, design.id)} type="button">Install {external ? 'Open Market Module' : 'Owned Module'}</button>
           </div>
         ))}
         {compatibleModules.length === 0 && <p>No compatible module designs available for this slot.</p>}
@@ -113,12 +117,12 @@ function SlotEditor({ game, template, selectedSlotId, assignment, onInstallModul
 }
 
 function AssemblyCard({ game, template, assignments, selectedSlotId, onSelectSlot, onInstallModule, onClearSlot, onAutofill, onReset, onSaveVehicleDesign }) {
-  const assembly = calculateVehicleAssembly(game.designs, template.id, assignments);
+  const assembly = calculateVehicleAssembly(game.designs, template.id, assignments, true);
   const selectedAssignment = assignments.find((assignment) => assignment.slotId === selectedSlotId);
   return (
     <div className={`data-card ${assembly.issues.length ? 'paused' : 'active'}`}>
       <strong>{template.name}</strong>
-      <small>{assembly.derived.filledCount}/{assembly.slots.length} slots filled // {assembly.issues.length ? 'issues detected' : 'valid assembly'}</small>
+      <small>{assembly.derived.filledCount}/{assembly.slots.length} slots filled // {assembly.derived.externalCount} open-market modules // {assembly.issues.length ? 'issues detected' : 'valid assembly'}</small>
       <p>{template.description}</p>
       <HullGrid assembly={assembly} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
       <div className="button-row">
@@ -136,7 +140,7 @@ function AssemblyCard({ game, template, assignments, selectedSlotId, onSelectSlo
       />
       <p>Base + modules: {formatStats(assembly.totals)}</p>
       <p>Derived: power balance {assembly.derived.powerBalance}, heat load {assembly.derived.heatBalance}, reliability {assembly.derived.reliability}, projected sale CR {assembly.derived.salePrice.toLocaleString('en-US')}.</p>
-      <p>Filled modules: {assembly.filledSlots.map((item) => `${item.slot.label} ${item.slot.x},${item.slot.y}: ${item.design.name}`).join(' // ') || 'none'}.</p>
+      <p>Filled modules: {assembly.filledSlots.map((item) => `${item.slot.label} ${item.slot.x},${item.slot.y}: ${item.design.name}${item.external ? ' [open market]' : ''}`).join(' // ') || 'none'}.</p>
       {assembly.issues.length > 0 && <p>Issues: {assembly.issues.join(' // ')}</p>}
     </div>
   );
@@ -166,7 +170,7 @@ export function VehicleAssemblyPanel({ game, onSaveVehicleDesign }) {
   }
 
   function autofill(templateId) {
-    setAssignmentsByTemplate((current) => ({ ...current, [templateId]: autoFillHullTemplate(game.designs, templateId) }));
+    setAssignmentsByTemplate((current) => ({ ...current, [templateId]: autoFillHullTemplate(game.designs, templateId, true) }));
   }
 
   function resetHull(templateId) {
@@ -178,7 +182,7 @@ export function VehicleAssemblyPanel({ game, onSaveVehicleDesign }) {
       <article className="console-panel">
         <div className="panel-heading">
           <span>Vehicle Slot Assembly</span>
-          <small>player-controlled module assignment</small>
+          <small>owned modules preferred // open-market fallback</small>
         </div>
         <div className="button-row segmented-actions">
           {hullSlotTemplates.map((template) => (
@@ -214,7 +218,7 @@ export function VehicleAssemblyPanel({ game, onSaveVehicleDesign }) {
         <CategoryLegend />
         <div className="panel-heading secondary-heading">
           <span>Available Modules</span>
-          <small>{game.designs.filter((design) => design.type === 'module').length} module designs</small>
+          <small>{game.designs.filter((design) => design.type === 'module').length} owned // open market fallback visible</small>
         </div>
         <ModuleCatalog designs={game.designs} />
       </article>
