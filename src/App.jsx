@@ -163,7 +163,7 @@ function App() {
         onUnassignEngineer={(engineerId) => applyAction((state) => unassignEngineer(state, engineerId))}
       />
 
-      <NodeTechnologyPanel onCreateDesign={(blueprintId) => applyAction((state) => createDesignFromBlueprint(state, blueprintId))} />
+      <NodeTechnologyPanel game={game} onCreateDesign={(blueprintId) => applyAction((state) => createDesignFromBlueprint(state, blueprintId))} />
 
       <AssetPreview />
     </main>
