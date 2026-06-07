@@ -112,7 +112,7 @@ function SlotEditor({ game, template, selectedSlotId, assignment, onInstallModul
   );
 }
 
-function AssemblyCard({ game, template, assignments, selectedSlotId, onSelectSlot, onInstallModule, onClearSlot, onAutofill, onReset }) {
+function AssemblyCard({ game, template, assignments, selectedSlotId, onSelectSlot, onInstallModule, onClearSlot, onAutofill, onReset, onSaveVehicleDesign }) {
   const assembly = calculateVehicleAssembly(game.designs, template.id, assignments);
   const selectedAssignment = assignments.find((assignment) => assignment.slotId === selectedSlotId);
   return (
@@ -124,6 +124,7 @@ function AssemblyCard({ game, template, assignments, selectedSlotId, onSelectSlo
       <div className="button-row">
         <button onClick={() => onAutofill(template.id)} type="button">Autofill Compatible</button>
         <button onClick={() => onReset(template.id)} type="button">Reset Hull</button>
+        <button onClick={() => onSaveVehicleDesign(template.id, assignments)} disabled={assembly.filledSlots.length === 0 || assembly.issues.length > 0} type="button">Save Vehicle Design</button>
       </div>
       <SlotEditor
         game={game}
@@ -141,7 +142,7 @@ function AssemblyCard({ game, template, assignments, selectedSlotId, onSelectSlo
   );
 }
 
-export function VehicleAssemblyPanel({ game }) {
+export function VehicleAssemblyPanel({ game, onSaveVehicleDesign }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState(hullSlotTemplates[0]?.id);
   const [selectedSlots, setSelectedSlots] = useState({});
   const [assignmentsByTemplate, setAssignmentsByTemplate] = useState({});
@@ -201,6 +202,7 @@ export function VehicleAssemblyPanel({ game }) {
           onClearSlot={clearSlot}
           onAutofill={autofill}
           onReset={resetHull}
+          onSaveVehicleDesign={onSaveVehicleDesign}
         />
       </article>
 
