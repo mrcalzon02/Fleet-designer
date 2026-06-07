@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AssetPreview } from './components/AssetPreview.jsx';
 import { CampaignPressurePanel } from './components/CampaignPressurePanel.jsx';
+import { ClientRelationsPanel } from './components/ClientRelationsPanel.jsx';
 import { CompanyHeader } from './components/CompanyHeader.jsx';
 import { ContractBoard } from './components/ContractBoard.jsx';
 import { FinancialOverview } from './components/FinancialOverview.jsx';
@@ -114,6 +115,8 @@ function App() {
         game={game}
         onSetDifficulty={(difficultyId) => applyAction((state) => setCompanyDifficulty(state, difficultyId))}
       />
+
+      <ClientRelationsPanel company={game.company} />
 
       <StaffMarketPanel
         game={game}
