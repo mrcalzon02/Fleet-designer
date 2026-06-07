@@ -8,7 +8,7 @@ import { OperationsPanels } from './components/OperationsPanels.jsx';
 import { ProductionPanels } from './components/ProductionPanels.jsx';
 import { initialGameState } from './game/initialState.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
-import { buySpotMaterial, toggleSupplyContract } from './game/supplySimulation.js';
+import { buySpotMaterial, defaultRefineryRecipes, queueRefineryJob, toggleSupplyContract } from './game/supplySimulation.js';
 import {
   acceptContract,
   advanceCycle,
@@ -130,6 +130,9 @@ function App() {
         inventory={game.inventory}
         commodities={game.commodities}
         supplyContracts={game.supplyContracts}
+        refineryRecipes={game.refineryRecipes ?? defaultRefineryRecipes}
+        refineryJobs={game.refineryJobs ?? []}
+        refineryCapacity={game.company.refineryCapacity ?? 4}
         finishedGoods={game.finishedGoods}
         warehouseUsed={warehouseUsed}
         warehouseCapacity={game.company.warehouseCapacity}
@@ -139,6 +142,7 @@ function App() {
         setProcurementQuantity={setProcurementQuantity}
         onBuySpotMaterial={(material, quantity) => applyAction((state) => buySpotMaterial(state, material, quantity))}
         onToggleSupplyContract={(contractId) => applyAction((state) => toggleSupplyContract(state, contractId))}
+        onQueueRefineryJob={(recipeId, quantity) => applyAction((state) => queueRefineryJob(state, recipeId, quantity))}
         onSellFinishedGood={(lotId, quantity) => applyAction((state) => sellFinishedGood(state, lotId, quantity))}
         onDeliverContractStock={(contractId, quantity) => applyAction((state) => deliverContractStock(state, contractId, quantity))}
       />
