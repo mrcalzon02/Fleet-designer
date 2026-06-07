@@ -44,6 +44,14 @@
   color: #ff7a7a;
 }
 
+.connection-link.mismatch,
+.connection-link.obstructed {
+  border-color: rgba(255, 59, 59, 0.95);
+  background: linear-gradient(90deg, rgba(255, 59, 59, 0.2), rgba(255, 184, 0, 0.12));
+  color: #ffd0d0;
+  box-shadow: inset 3px 0 0 rgba(255, 59, 59, 0.95);
+}
+
 .template-cell.routed:not(.occupied) {
   color: #ffb800;
   background: rgba(255, 184, 0, 0.16);
@@ -55,6 +63,13 @@
   color: #ff7a7a;
   background: rgba(255, 59, 59, 0.18);
   border-color: rgba(255, 59, 59, 0.78);
+  font-weight: 900;
+}
+
+.template-cell.obstructed:not(.occupied) {
+  color: #05070a;
+  background: #ff3b3b;
+  border-color: rgba(255, 59, 59, 0.95);
   font-weight: 900;
 }
 
