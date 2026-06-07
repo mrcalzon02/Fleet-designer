@@ -7,6 +7,10 @@ function formatBill(bill, commodities) {
     .join(', ');
 }
 
+function canOperateLot(lot) {
+  return lot.availableQuantity > 0 && !['sold', 'delivered', 'scrapped'].includes(lot.status);
+}
+
 export function InventoryWarehousePanels({
   inventory,
   commodities,
@@ -24,6 +28,8 @@ export function InventoryWarehousePanels({
   onBuySpotMaterial,
   onToggleSupplyContract,
   onQueueRefineryJob,
+  onInspectFinishedGood,
+  onScrapFinishedGood,
   onSellFinishedGood,
   onDeliverContractStock,
 }) {
@@ -141,13 +147,14 @@ export function InventoryWarehousePanels({
             {finishedGoods.length === 0 && <p>No finished goods in storage.</p>}
             {finishedGoods.map((lot) => {
               const lotQty = getLotQuantity(lot.id, lot.availableQuantity || 1);
+              const operable = canOperateLot(lot);
               return (
                 <div className={`data-card ${lot.status}`} key={lot.id}>
                   <strong>{lot.designName}</strong>
-                  <small>{lot.type} // {lot.status} // QA {lot.qaResult}</small>
-                  <p>Lot {lot.id}. Available {lot.availableQuantity}/{lot.quantity}. Sold {lot.soldQuantity ?? 0}. Delivered {lot.deliveredQuantity ?? 0}. Created C{lot.createdCycle}.</p>
+                  <small>{lot.type} // {lot.status} // QA {lot.qaResult} // age {lot.age ?? 0}</small>
+                  <p>Lot {lot.id}. Available {lot.availableQuantity}/{lot.quantity}. Sold {lot.soldQuantity ?? 0}. Delivered {lot.deliveredQuantity ?? 0}. Created C{lot.createdCycle}. {lot.inspected ? 'Inspected.' : 'Uninspected.'}</p>
                   <div className="button-row">
-                    {lot.status === 'available-market' && lot.availableQuantity > 0 && (
+                    {['available-market', 'stale-market'].includes(lot.status) && lot.availableQuantity > 0 && (
                       <>
                         <QuantityControl
                           label="Sell"
@@ -173,6 +180,12 @@ export function InventoryWarehousePanels({
                         </button>
                       </>
                     )}
+                    {operable && !lot.inspected && (
+                      <button onClick={() => onInspectFinishedGood(lot.id)}>Inspect Lot</button>
+                    )}
+                    {operable && (
+                      <button className="danger-action" onClick={() => onScrapFinishedGood(lot.id)}>Scrap Lot</button>
+                    )}
                   </div>
                 </div>
               );
@@ -186,7 +199,7 @@ export function InventoryWarehousePanels({
             <small>early model</small>
           </div>
           <p>
-            Spot purchases are expensive but immediate. Supplier contracts are cheaper per unit, but they consume cash every cycle, can miss deliveries, and expire after their lock period. Refinery jobs convert bulk inputs into higher-value production materials using limited cycle capacity.
+            Spot purchases are expensive but immediate. Supplier contracts are cheaper per unit, but they consume cash every cycle, can miss deliveries, and expire after their lock period. Refinery jobs convert bulk inputs into higher-value production materials using limited cycle capacity. Finished stock now ages, costs money to store, and can be inspected or scrapped.
           </p>
         </article>
       </section>
