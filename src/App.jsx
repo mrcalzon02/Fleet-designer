@@ -7,6 +7,7 @@ import { InventoryWarehousePanels } from './components/InventoryWarehousePanels.
 import { NodeTechnologyPanel } from './components/NodeTechnologyPanel.jsx';
 import { OperationsPanels } from './components/OperationsPanels.jsx';
 import { ProductionPanels } from './components/ProductionPanels.jsx';
+import { VehicleAssemblyPanel } from './components/VehicleAssemblyPanel.jsx';
 import { createDesignFromBlueprint } from './game/designSimulation.js';
 import { initialGameState } from './game/initialState.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
@@ -128,6 +129,8 @@ function App() {
           onCancelProductionRun={(runId) => applyAction((state) => cancelProductionRun(state, runId))}
         />
       </section>
+
+      <VehicleAssemblyPanel game={game} />
 
       <InventoryWarehousePanels
         inventory={game.inventory}
