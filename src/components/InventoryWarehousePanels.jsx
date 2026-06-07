@@ -1,10 +1,19 @@
 import { formatCredits } from '../game/simulation.js';
 import { QuantityControl } from './QuantityControl.jsx';
 
+function formatBill(bill, commodities) {
+  return Object.entries(bill)
+    .map(([material, amount]) => `${amount} ${commodities?.[material]?.label ?? material}`)
+    .join(', ');
+}
+
 export function InventoryWarehousePanels({
   inventory,
   commodities,
   supplyContracts,
+  refineryRecipes,
+  refineryJobs,
+  refineryCapacity,
   finishedGoods,
   warehouseUsed,
   warehouseCapacity,
@@ -14,6 +23,7 @@ export function InventoryWarehousePanels({
   setProcurementQuantity,
   onBuySpotMaterial,
   onToggleSupplyContract,
+  onQueueRefineryJob,
   onSellFinishedGood,
   onDeliverContractStock,
 }) {
@@ -76,6 +86,54 @@ export function InventoryWarehousePanels({
       <section className="two-column">
         <article className="console-panel">
           <div className="panel-heading">
+            <span>Refinery Processing</span>
+            <small>capacity {refineryCapacity} / cycle</small>
+          </div>
+          <div className="stack-list">
+            {refineryRecipes.map((recipe) => {
+              const recipeQty = getProcurementQuantity(recipe.id);
+              return (
+                <div className="data-card" key={recipe.id}>
+                  <strong>{recipe.name}</strong>
+                  <small>{formatBill(recipe.input, commodities)} → {formatBill(recipe.output, commodities)}</small>
+                  <p>Cost {formatCredits(recipe.cashCost)} each. Work {recipe.workRequired} per unit. Queue cost {formatCredits(recipe.cashCost * recipeQty)}.</p>
+                  <div className="button-row">
+                    <QuantityControl
+                      label="Run"
+                      value={recipeQty}
+                      max={25}
+                      onChange={(value) => setProcurementQuantity(recipe.id, value)}
+                    />
+                    <button onClick={() => onQueueRefineryJob(recipe.id, recipeQty)}>Queue Refinery Job</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </article>
+
+        <article className="console-panel">
+          <div className="panel-heading">
+            <span>Refinery Queue</span>
+            <small>{refineryJobs.length} jobs</small>
+          </div>
+          <div className="stack-list">
+            {refineryJobs.length === 0 && <p>No refinery jobs queued.</p>}
+            {refineryJobs.map((job) => (
+              <div className={`data-card ${job.status}`} key={job.id}>
+                <strong>{job.recipeName}</strong>
+                <small>{job.quantity} units // {job.status}</small>
+                <progress max={job.required} value={job.progress} />
+                <p>Progress {job.progress}/{job.required}. Output: {formatBill(job.output, commodities)} per unit.</p>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="two-column">
+        <article className="console-panel">
+          <div className="panel-heading">
             <span>Finished Goods Warehouse</span>
             <small>{warehouseUsed}/{warehouseCapacity} capacity</small>
           </div>
@@ -128,7 +186,7 @@ export function InventoryWarehousePanels({
             <small>early model</small>
           </div>
           <p>
-            Spot purchases are expensive but immediate. Supplier contracts are cheaper per unit, but they consume cash every cycle, can miss deliveries, and expire after their lock period. This replaces the old free automatic restock.
+            Spot purchases are expensive but immediate. Supplier contracts are cheaper per unit, but they consume cash every cycle, can miss deliveries, and expire after their lock period. Refinery jobs convert bulk inputs into higher-value production materials using limited cycle capacity.
           </p>
         </article>
       </section>
