@@ -16,18 +16,31 @@ function nodeGlyph(nodeId) {
   return node?.name?.slice(0, 2).toUpperCase() ?? '??';
 }
 
-function TemplateGrid({ template, placedCells = [] }) {
+function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
   if (!template) return null;
   const placed = new Map(placedCells.map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
+  const routed = new Map();
+  for (const report of connectionMetrics?.reports ?? []) {
+    for (const cell of report.route ?? []) {
+      const key = `${cell.x},${cell.y}`;
+      routed.set(key, Math.max(routed.get(key) ?? 0, 1));
+    }
+  }
+  for (const congested of connectionMetrics?.congestion?.congestedCells ?? []) {
+    routed.set(congested.key, congested.count);
+  }
+
   return (
     <div className="template-grid" aria-label={`${template.name} grid`}>
       {template.grid.map((row, rowIndex) => (
         <div className="template-row" key={`${template.id}-${rowIndex}`}>
           {[...row].map((cell, cellIndex) => {
-            const placedNodeId = placed.get(`${cellIndex},${rowIndex}`);
+            const key = `${cellIndex},${rowIndex}`;
+            const placedNodeId = placed.get(key);
+            const routeCount = routed.get(key) ?? 0;
             return (
-              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${placedNodeId ? 'occupied' : ''}`} key={`${rowIndex}-${cellIndex}`} title={placedNodeId ?? ''}>
-                {placedNodeId ? nodeGlyph(placedNodeId) : cell === 'X' ? '■' : '·'}
+              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${routeCount ? 'routed' : ''} ${routeCount > 1 ? 'congested' : ''} ${placedNodeId ? 'occupied' : ''}`} key={`${rowIndex}-${cellIndex}`} title={placedNodeId ?? (routeCount ? `route x${routeCount}` : '')}>
+                {placedNodeId ? nodeGlyph(placedNodeId) : routeCount > 1 ? '╳' : routeCount ? '─' : cell === 'X' ? '■' : '·'}
               </span>
             );
           })}
@@ -43,7 +56,7 @@ function ConnectionReport({ reports }) {
     <div className="connection-report">
       {reports.map((report, index) => (
         <span className={`connection-link ${report.classification}`} key={`${report.from}-${report.to}-${index}`}>
-          {nodeGlyph(report.from)}→{nodeGlyph(report.to)} // {report.classification} // d{report.distance ?? 'x'} // {formatStats(report.modifier)}
+          {nodeGlyph(report.from)}→{nodeGlyph(report.to)} // {report.classification} // d{report.distance ?? 'x'} // route {(report.route ?? []).length} // {formatStats(report.modifier)}
         </span>
       ))}
     </div>
@@ -88,8 +101,9 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
       <small>{blueprint.type} // {blueprint.nodeIds.length} nodes // {availability.available ? 'available' : 'blocked'}</small>
       <p>{blueprint.description}</p>
       {template && <p>Template: {template.name}. {template.description}</p>}
-      <TemplateGrid template={template} placedCells={placedCells} />
+      <TemplateGrid template={template} placedCells={placedCells} connectionMetrics={design.connectionMetrics} />
       <ConnectionReport reports={reports} />
+      <p>Route congestion: {design.connectionMetrics?.congestion?.congestionPenalty ?? 0} penalty across {(design.connectionMetrics?.congestion?.congestedCells ?? []).length} congested cells.</p>
       <p>Layout modifiers: {formatStats(design.connectionMetrics?.summary ?? {})}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
       <p>Bill: {formatBill(design.bill)}.</p>
