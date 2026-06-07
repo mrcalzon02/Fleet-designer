@@ -6,6 +6,7 @@ export const initialGameState = {
     cycle: 7,
     burnRate: 420000,
     factoryCapacity: 6,
+    refineryCapacity: 4,
     warehouseCapacity: 100,
     status: 'operating',
   },
@@ -80,6 +81,7 @@ export const initialGameState = {
       remainingCycles: 0,
     },
   ],
+  refineryJobs: [],
   engineers: [
     {
       id: 'eng-mara-kade',
