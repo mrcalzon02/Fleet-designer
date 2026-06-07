@@ -20,14 +20,14 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, and componentized cockpit panels.
+Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, and engineer-driven R&D.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
 Implemented core work:
 
 - Company state: cash, reputation, cycle, burn rate, bankruptcy.
-- Turn advancement: burn rate, research progress, priority-based factory allocation, supply restock, contract deadline checks.
+- Turn advancement: burn rate, assigned-engineer research progress, priority-based factory allocation, supply restock, contract deadline checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
 - Contract-specific production: accepted contracts now require their own queued production run.
 - Quantity production: market production can now be queued in variable quantities from the cockpit UI.
@@ -38,6 +38,8 @@ Implemented core work:
 - Contract delivery: reserved contract stock lots can be delivered manually after production completes, including partial contract delivery.
 - Contract progress tracking: contracts now track delivered quantity and earned reward.
 - Partial failure logic: late contracts calculate reduced penalties based on partial completion.
+- R&D assignment: engineers can be assigned and removed from research projects from the cockpit.
+- Engineer-driven research: project progress now depends on assigned engineer skill, specialty match, morale, and fatigue.
 - Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
@@ -55,13 +57,15 @@ Recently fixed:
 - Added production run priority, pause/resume, cancel, material salvage, and cash salvage.
 - Replaced unrealistic per-run capacity application with a single priority-sorted factory capacity allocator.
 - Extracted cockpit UI into `CompanyHeader`, `FinancialOverview`, `ContractBoard`, `ProductionPanels`, `InventoryWarehousePanels`, `OperationsPanels`, and `QuantityControl`.
+- Added `researchSimulation.js` to keep R&D assignment and progress logic out of the main simulation file.
+- Added an engineer roster with specialty, skill, salary, fatigue, morale, and project assignment.
 
 Known limitations to fix before calling Phase 1 complete:
 
 - Stock lots can be partially consumed but not manually split, merged, scrapped, inspected, or reclassified.
 - Contract production still auto-builds the remaining needed amount rather than letting the player choose overproduction or staged batches.
 - Supply restocking is automatic and not yet tied to supplier contracts or commodity pricing.
-- Research engineer assignment is represented by data but not yet controllable in the UI.
+- Engineer hiring, firing, training, salary pressure, burnout events, and deep specialization are not implemented yet.
 - Warehouse capacity is checked at queue time, but there is not yet a cost for storage, warehousing upgrades, or stock aging.
 - The simulation file is now the next place to watch for growth; future mechanics should be split by domain when it becomes harder to read.
 
