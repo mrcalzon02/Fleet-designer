@@ -1,3 +1,4 @@
+import { calculateDefectRisk, calculateOperatingBurn, calculateProductionCashCost } from './difficultyEffects.js';
 import { progressResearchProjects } from './researchSimulation.js';
 import { processSupplyContracts, updateCommodityPrices } from './supplySimulation.js';
 import { processWarehouseAging } from './warehouseSimulation.js';
@@ -43,7 +44,7 @@ function restoreBill(inventory, bill, quantity = 1, ratio = 1) {
   }
 }
 
-function buildProductionRun(design, quantity, purpose, options = {}) {
+function buildProductionRun(state, design, quantity, purpose, options = {}) {
   const normalizedQuantity = normalizeQuantity(quantity);
   const complexity = design.type === 'vessel' ? 4 : design.type === 'module' ? 3 : 2;
   return {
@@ -62,7 +63,7 @@ function buildProductionRun(design, quantity, purpose, options = {}) {
     materialBill: { ...design.bill },
     priority: normalizePriority(options.priority),
     queuedCycle: options.queuedCycle ?? null,
-    defectRisk: Math.max(4, 24 - Math.round(design.reliability / 4)),
+    defectRisk: calculateDefectRisk(state, design),
     qaResult: null,
     stockLotId: null,
     status: 'queued',
@@ -151,14 +152,20 @@ export function queueProduction(state, designId, quantity = 1, purpose = 'market
     return next;
   }
 
+  const cashCost = calculateProductionCashCost(next, design, normalizedQuantity);
+  if (next.company.cash < cashCost) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Production blocked. Insufficient cash overhead for ${design.name}.`);
+    return next;
+  }
+
   spendBill(next.inventory, design.bill, normalizedQuantity);
-  next.productionRuns.push(buildProductionRun(design, normalizedQuantity, purpose, {
+  next.productionRuns.push(buildProductionRun(next, design, normalizedQuantity, purpose, {
     ...options,
     queuedCycle: next.company.cycle,
   }));
 
-  next.company.cash -= Math.round(design.cost * normalizedQuantity * 0.35);
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}.`);
+  next.company.cash -= cashCost;
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}. Cash overhead ${currency(cashCost)}.`);
   return next;
 }
 
@@ -200,8 +207,14 @@ export function queueContractProduction(state, contractId) {
     return next;
   }
 
+  const cashCost = calculateProductionCashCost(next, design, quantityToBuild);
+  if (next.company.cash < cashCost) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. Insufficient cash overhead for ${contract.title}.`);
+    return next;
+  }
+
   spendBill(next.inventory, design.bill, quantityToBuild);
-  const run = buildProductionRun(design, quantityToBuild, 'contract fulfillment', {
+  const run = buildProductionRun(next, design, quantityToBuild, 'contract fulfillment', {
     contractId: contract.id,
     revenueMode: 'contract',
     priority: 'high',
@@ -209,8 +222,8 @@ export function queueContractProduction(state, contractId) {
   });
   next.productionRuns.push(run);
   contract.productionRunId = run.id;
-  next.company.cash -= Math.round(design.cost * quantityToBuild * 0.35);
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Payout reserved until delivery.`);
+  next.company.cash -= cashCost;
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Cash overhead ${currency(cashCost)}. Payout reserved until delivery.`);
   return next;
 }
 
@@ -383,7 +396,7 @@ function completeProduction(next, run) {
 
   if (run.revenueMode === 'market') {
     next.eventLog.unshift(
-      `Cycle ${next.company.cycle}: Completed ${run.quantity} x ${run.designName}. Stock lot ${lot.id} moved to finished goods for market sale. QA: ${run.qaResult}.`
+      `Cycle ${next.company.cycle}: Completed ${run.quantity} x ${run.designName}. Stock lot ${lot.id} moved to finished goods for market sale. QA: ${run.qaResult}. Defect risk ${run.defectRisk}%.`
     );
     return;
   }
@@ -392,12 +405,12 @@ function completeProduction(next, run) {
     const contract = next.contracts.find((item) => item.id === run.contractId);
     if (contract) contract.stockLotId = lot.id;
     next.eventLog.unshift(
-      `Cycle ${next.company.cycle}: Contract batch completed for ${run.designName}. Stock lot ${lot.id} reserved for delivery. QA: ${run.qaResult}.`
+      `Cycle ${next.company.cycle}: Contract batch completed for ${run.designName}. Stock lot ${lot.id} reserved for delivery. QA: ${run.qaResult}. Defect risk ${run.defectRisk}%.`
     );
     return;
   }
 
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Completed internal production for ${run.designName}. Stock lot ${lot.id} stored.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Completed internal production for ${run.designName}. Stock lot ${lot.id} stored. Defect risk ${run.defectRisk}%.`);
 }
 
 function resolveContractDeadlines(next) {
@@ -447,7 +460,9 @@ function allocateFactoryCapacity(next) {
 export function advanceCycle(state) {
   const next = clone(state);
   next.company.cycle += 1;
-  next.company.cash -= next.company.burnRate;
+  const operatingBurn = calculateOperatingBurn(next);
+  next.company.effectiveBurnRate = operatingBurn;
+  next.company.cash -= operatingBurn;
 
   const capacityUsed = allocateFactoryCapacity(next);
   progressResearchProjects(next);
@@ -460,7 +475,7 @@ export function advanceCycle(state) {
     next.company.status = 'bankrupt';
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Bankruptcy triggered. Welcome to the intergalactic breadline.`);
   } else {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Burn paid, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply and warehouse costs processed.`);
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Operating burn ${currency(operatingBurn)}, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply and warehouse costs processed.`);
   }
 
   next.eventLog = next.eventLog.slice(0, 18);
