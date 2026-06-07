@@ -1,4 +1,5 @@
 import { replenishOpenContracts } from './contractContent.js';
+import { applyContractFailureRelations, applyContractFulfillmentRelations } from './contractRelations.js';
 import { calculateDefectRisk, calculateOperatingBurn, calculateProductionCashCost } from './difficultyEffects.js';
 import { progressResearchProjects } from './researchSimulation.js';
 import { advanceRivalCompanies } from './rivalSimulation.js';
@@ -414,7 +415,6 @@ export function deliverContractStock(state, contractId, quantity = 1) {
   contract.deliveredQuantity = (contract.deliveredQuantity ?? 0) + deliverQuantity;
   contract.earnedReward = (contract.earnedReward ?? 0) + payout;
   next.company.cash += payout;
-  next.company.reputation += lot.qaResult === 'defective' ? 0 : 1;
 
   if (lot.availableQuantity <= 0) {
     lot.availableQuantity = 0;
@@ -426,7 +426,14 @@ export function deliverContractStock(state, contractId, quantity = 1) {
     contract.status = 'fulfilled';
     contract.deliveredCycle = next.company.cycle;
     contract.stockLotId = lot.id;
-    next.company.reputation += lot.qaResult === 'defective' ? 1 : 3;
+    const relationEvent = applyContractFulfillmentRelations(next, contract, lot);
+    if (relationEvent) {
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: Client relations - ${relationEvent.sourceName} ${relationEvent.outcome}. Company reputation ${relationEvent.companyRepDelta >= 0 ? '+' : ''}${relationEvent.companyRepDelta}, source ${relationEvent.sourceRepDelta >= 0 ? '+' : ''}${relationEvent.sourceRepDelta}, alignment ${relationEvent.alignmentDelta >= 0 ? '+' : ''}${relationEvent.alignmentDelta}.`);
+    } else {
+      next.company.reputation += lot.qaResult === 'defective' ? 1 : 3;
+    }
+  } else {
+    next.company.reputation += lot.qaResult === 'defective' ? 0 : 1;
   }
 
   next.eventLog.unshift(
@@ -468,7 +475,12 @@ function resolveContractDeadlines(next) {
       const adjustedPenalty = Math.round(contract.penalty * (1 - completionRatio));
       contract.status = 'failed';
       next.company.cash -= adjustedPenalty;
-      next.company.reputation -= adjustedPenalty > 0 ? 5 : 1;
+      const relationEvent = applyContractFailureRelations(next, contract);
+      if (relationEvent) {
+        next.eventLog.unshift(`Cycle ${next.company.cycle}: Client relations - ${relationEvent.sourceName} failure. Company reputation ${relationEvent.companyRepDelta}, source ${relationEvent.sourceRepDelta}, alignment ${relationEvent.alignmentDelta}.`);
+      } else {
+        next.company.reputation -= adjustedPenalty > 0 ? 5 : 1;
+      }
       next.eventLog.unshift(`Cycle ${next.company.cycle}: Failed ${contract.title}. Delivered ${contract.deliveredQuantity ?? 0}/${contract.quantity}. Deadline C${deadline}. Penalty ${currency(adjustedPenalty)}.`);
     }
   }
