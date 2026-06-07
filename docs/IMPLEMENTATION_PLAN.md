@@ -20,13 +20,13 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, supplier procurement, refinery processing, warehouse operations, and first-pass component node technology data.
+Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, supplier procurement, refinery processing, warehouse operations, research-gated node access, and prototype node-chain design synthesis.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
 Implemented core work:
 
-- Company state: cash, reputation, cycle, burn rate, bankruptcy.
+- Company state: cash, reputation, cycle, burn rate, bankruptcy, unlocked technologies, and unlocked component nodes.
 - Turn advancement: burn rate, assigned-engineer research progress, priority-based factory allocation, supplier contract processing, refinery job processing, warehouse stock aging, storage cost processing, commodity price movement, contract deadline checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
 - Contract-specific production: accepted contracts now require their own queued production run.
@@ -41,6 +41,7 @@ Implemented core work:
 - Partial failure logic: late contracts calculate reduced penalties based on partial completion.
 - R&D assignment: engineers can be assigned and removed from research projects from the cockpit.
 - Engineer-driven research: project progress now depends on assigned engineer skill, specialty match, morale, and fatigue.
+- Research unlocks: completing node-related research can unlock technology tree entries and their component nodes.
 - Procurement console: raw materials can be bought on the spot market and supplier contracts can be activated or suspended.
 - Supplier contracts: active contracts deliver materials each cycle, charge cash, can miss deliveries, and expire after their lock period.
 - Commodity pricing: material spot prices move each cycle using simple volatility and trend rules.
@@ -49,8 +50,9 @@ Implemented core work:
 - Component node library: seeded early crude nodes, late advanced nodes, stat modifiers, port counts, shapes, descriptions, and technology families.
 - Corporate technology seeds: player and NPC corporations now have defined starting node access profiles for future differentiation.
 - Node inspection UI: cockpit now shows component node descriptions, stat effects, shapes, ports, tech tree entries, and corporate seed profiles.
+- Node access UI: nodes, technologies, and prototype blueprints now show locked/unlocked status from the company state.
 - Prototype blueprint synthesis: node chains now calculate design quality, reliability, cost, sale price, bills of material, defect pressure, and chain stat totals.
-- Producible node-chain designs: prototype blueprints can be promoted into owned designs that appear in the design catalog and can enter production.
+- Producible node-chain designs: unlocked prototype blueprints can be promoted into owned designs that appear in the design catalog and can enter production.
 - Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
@@ -77,8 +79,11 @@ Recently fixed:
 - Added warehouse inspection and scrapping controls to the finished-goods panel.
 - Added `nodeLibrary.js` with first-pass component nodes, technology tree entries, corporation seeds, and node stat summarization helpers.
 - Added `NodeTechnologyPanel` to expose node data, corporate tech seeds, and total chained stat effects in the cockpit.
-- Added `designSimulation.js` with prototype node-chain blueprints, design calculation, bill pressure, and prototype design creation.
-- Added prototype blueprint cards to the node technology panel with live calculated design output and create-design controls.
+- Added `designSimulation.js` with prototype node-chain blueprints, design calculation, bill pressure, prototype design creation, and node-access validation.
+- Added prototype blueprint cards to the node technology panel with live calculated design output, locked/missing-node display, and create-design controls.
+- Added company-owned `unlockedTechIds` and `unlockedNodeIds` state.
+- Added research projects that unlock component-node technologies.
+- Added research-completion unlock logic for technology tree entries and their node unlocks.
 
 Known limitations to fix before calling Phase 1 complete:
 
@@ -87,7 +92,7 @@ Known limitations to fix before calling Phase 1 complete:
 - Procurement has spot prices, supplier contracts, and refinery conversion, but no supplier reputation, route risk, negotiated terms, or refinery upgrades yet.
 - Engineer hiring, firing, training, salary pressure, burnout events, and deep specialization are not implemented yet.
 - Warehouse capacity and storage costs exist, but there are not yet warehousing upgrades, cold storage, insurance, or stock reservation policies.
-- Component nodes can create calculated prototype designs, but not yet through spatial drag/drop editing, research-gated unlocking, corporation-specific availability checks, or visual connection validation.
+- Component nodes can create calculated prototype designs through research-gated availability, but not yet through spatial drag/drop editing, corporation-specific validation beyond player unlock state, or visual connection validation.
 - The simulation file is now the next place to watch for growth; future mechanics should be split by domain when it becomes harder to read.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
