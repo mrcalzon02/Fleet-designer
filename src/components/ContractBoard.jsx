@@ -1,3 +1,4 @@
+import { skullLabel } from '../game/contractContent.js';
 import { designMeetsContractPressure, formatCredits } from '../game/simulation.js';
 import { QuantityControl } from './QuantityControl.jsx';
 
@@ -6,7 +7,7 @@ export function ContractBoard({ contracts, designs, productionRuns, finishedGood
     <article className="console-panel tall-panel">
       <div className="panel-heading">
         <span>Contract Board</span>
-        <small>accept, build, deliver</small>
+        <small>source factions, skulls, reputation gates</small>
       </div>
       <div className="stack-list">
         {contracts.map((contract) => {
@@ -16,11 +17,15 @@ export function ContractBoard({ contracts, designs, productionRuns, finishedGood
           const remaining = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
           const deliverQty = stockLot ? getLotQuantity(`contract-${stockLot.id}`, Math.min(stockLot.availableQuantity, remaining)) : 1;
           const displayDeadline = contract.acceptedDeadline ?? contract.effectiveDeadline ?? contract.deadline;
+          const skulls = contract.skulls ?? 1;
           return (
             <div className={`data-card ${contract.status} ${contract.contestedBy ? 'paused' : ''}`} key={contract.id}>
               <strong>{contract.title}</strong>
-              <small>{contract.client} // {contract.category}</small>
-              <p>Need {contract.quantity} x {contract.requiredType}. Delivered {contract.deliveredQuantity ?? 0}/{contract.quantity}. Deadline C{displayDeadline}. Reward {formatCredits(contract.reward)}.</p>
+              <small>{contract.client} // {contract.category} // {skullLabel(skulls)}</small>
+              <p>Source: {contract.sourceType ?? 'legacy client'} // alignment {contract.alignment ?? 'commercial'} // terms {contract.precision ?? 'standard acceptance'}.</p>
+              <p>Need {contract.quantity} x {contract.requiredType}. Delivered {contract.deliveredQuantity ?? 0}/{contract.quantity}. Deadline C{displayDeadline}. Reward {formatCredits(contract.reward)}. Penalty {formatCredits(contract.penalty)}.</p>
+              <p>Minimum acceptance: quality {contract.minQuality ?? 0}, reliability {contract.minReliability ?? 0}. Reputation gate {contract.minCompanyReputation ?? 0}.</p>
+              {contract.description && <p>{contract.description}</p>}
               {contract.contestedBy && (
                 <p>Contested by {contract.contestedBy}. Minimum quality {contract.minQuality ?? 0}, reliability {contract.minReliability ?? 0}. Pressure index {contract.contestPressure ?? 'n/a'}.</p>
               )}
@@ -34,7 +39,7 @@ export function ContractBoard({ contracts, designs, productionRuns, finishedGood
                     const eligible = designMeetsContractPressure(design, contract);
                     return (
                       <button key={design.id} onClick={() => onAcceptContract(contract.id, design.id)} disabled={!eligible} title={eligible ? 'Eligible design' : `Needs quality ${contract.minQuality ?? 0} and reliability ${contract.minReliability ?? 0}`}>
-                        Use {design.name}{eligible ? '' : ' [below pressure]'}
+                        Use {design.name}{eligible ? '' : ' [below terms]'}
                       </button>
                     );
                   })}
