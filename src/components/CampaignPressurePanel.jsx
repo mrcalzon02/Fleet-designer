@@ -7,11 +7,11 @@ function formatMultiplier(key, value) {
   return `${label}: ${value}x`;
 }
 
-function DifficultyCard({ profile }) {
+function DifficultyCard({ profile, active }) {
   return (
     <div className="data-card active">
       <strong>{profile.name}</strong>
-      <small>{profile.rivalCompanyCount} rival companies</small>
+      <small>{profile.rivalCompanyCount} rival companies // {active ? 'active company pressure' : 'preview only'}</small>
       <p>{profile.description}</p>
       <p>{Object.entries(profile.multipliers).map(([key, value]) => formatMultiplier(key, value)).join(' // ')}</p>
     </div>
@@ -35,20 +35,23 @@ function RivalCard({ rival, techLevel }) {
   );
 }
 
-export function CampaignPressurePanel() {
-  const [difficultyId, setDifficultyId] = useState('normal');
+export function CampaignPressurePanel({ game, onSetDifficulty }) {
+  const activeDifficultyId = game?.company?.difficultyId ?? 'normal';
+  const [difficultyId, setDifficultyId] = useState(activeDifficultyId);
   const [techLevel, setTechLevel] = useState(1);
   const selectedProfile = getDifficultyProfile(difficultyId);
+  const activeProfile = getDifficultyProfile(activeDifficultyId);
   const rivals = useMemo(() => rivalTemplatesForDifficulty(difficultyId), [difficultyId]);
+  const active = selectedProfile.id === activeProfile.id;
 
   return (
     <section className="two-column">
       <article className="console-panel">
         <div className="panel-heading">
           <span>Campaign Pressure Setup</span>
-          <small>inspection only</small>
+          <small>{activeProfile.name} active</small>
         </div>
-        <p>This panel previews difficulty scaling and rival roster selection. These values are data-visible but not yet applied to the live economy.</p>
+        <p>Difficulty now affects research speed and supply/refinery costs. Rival behavior remains a preview until rival simulation is instantiated.</p>
         <div className="button-row segmented-actions">
           {difficultyProfiles.map((profile) => (
             <button
@@ -61,6 +64,9 @@ export function CampaignPressurePanel() {
             </button>
           ))}
         </div>
+        <div className="button-row">
+          <button disabled={active} onClick={() => onSetDifficulty(difficultyId)} type="button">Apply Difficulty</button>
+        </div>
         <label className="quantity-control">
           <span>Tech Level</span>
           <input
@@ -71,7 +77,7 @@ export function CampaignPressurePanel() {
             onChange={(event) => setTechLevel(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
           />
         </label>
-        <DifficultyCard profile={selectedProfile} />
+        <DifficultyCard profile={selectedProfile} active={active} />
       </article>
 
       <article className="console-panel">
