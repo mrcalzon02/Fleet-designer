@@ -39,15 +39,18 @@ function CorporationCard({ corporation }) {
 function BlueprintCard({ blueprint, game, onCreateDesign }) {
   const design = calculateBlueprintDesign(blueprint);
   const availability = blueprintAvailability(game, blueprint);
+  const footprint = availability.layout.footprint;
   return (
     <div className={`data-card ${availability.available ? 'active' : 'paused'}`}>
       <strong>{blueprint.name}</strong>
-      <small>{blueprint.type} // {blueprint.nodeIds.length} nodes // {availability.available ? 'available' : 'locked'}</small>
+      <small>{blueprint.type} // {blueprint.nodeIds.length} nodes // {availability.available ? 'available' : 'blocked'}</small>
       <p>{blueprint.description}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
       <p>Bill: {formatBill(design.bill)}.</p>
       <p>Chain effects: {formatStats(design.chainStats)}</p>
-      {!availability.available && <p>Missing nodes: {availability.missingNodes.map((node) => node.name).join(', ')}.</p>}
+      <p>Layout: area {footprint.area}, span {footprint.width}w x {footprint.height}h, ports {footprint.inputs} in / {footprint.outputs} out.</p>
+      {!availability.nodeAccess && <p>Missing nodes: {availability.missingNodes.map((node) => node.name).join(', ')}.</p>}
+      {!availability.layoutValid && <p>Layout issues: {availability.layout.issues.join('; ')}.</p>}
       <button onClick={() => onCreateDesign(blueprint.id)} disabled={!availability.available}>Create Prototype Design</button>
     </div>
   );
