@@ -16,6 +16,11 @@ function nodeGlyph(nodeId) {
   return node?.name?.slice(0, 2).toUpperCase() ?? '??';
 }
 
+function placementLabel(placements, nodeId) {
+  const placement = placements.find((item) => item.nodeId === nodeId);
+  return placement ? `${placement.facing ?? 'east'} @ ${placement.x},${placement.y}` : 'unplaced';
+}
+
 function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
   if (!template) return null;
   const placed = new Map(placedCells.map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
@@ -30,7 +35,7 @@ function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
   }
 
   for (const anchor of connectionMetrics?.portAnchors ?? []) {
-    ports.set(`${anchor.x},${anchor.y}`, anchor.role);
+    ports.set(`${anchor.x},${anchor.y}`, anchor);
   }
 
   for (const congested of connectionMetrics?.congestion?.congestedCells ?? []) {
@@ -45,9 +50,10 @@ function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
             const key = `${cellIndex},${rowIndex}`;
             const placedNodeId = placed.get(key);
             const routeCount = routed.get(key) ?? 0;
-            const portRole = ports.get(key);
+            const portAnchor = ports.get(key);
+            const portRole = portAnchor?.role;
             return (
-              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${routeCount ? 'routed' : ''} ${routeCount > 1 ? 'congested' : ''} ${placedNodeId ? 'occupied' : ''} ${portRole ? `port-${portRole}` : ''}`} key={`${rowIndex}-${cellIndex}`} title={placedNodeId ?? (portRole ? `${portRole} port` : routeCount ? `route x${routeCount}` : '')}>
+              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${routeCount ? 'routed' : ''} ${routeCount > 1 ? 'congested' : ''} ${placedNodeId ? 'occupied' : ''} ${portRole ? `port-${portRole}` : ''}`} key={`${rowIndex}-${cellIndex}`} title={portAnchor ? `${portAnchor.portId} ${portRole} ${portAnchor.facing}` : placedNodeId ?? (routeCount ? `route x${routeCount}` : '')}>
                 {portRole === 'output' ? 'O' : portRole === 'input' ? 'I' : placedNodeId ? nodeGlyph(placedNodeId) : routeCount > 1 ? '╳' : routeCount ? '─' : cell === 'X' ? '■' : '·'}
               </span>
             );
@@ -64,7 +70,7 @@ function ConnectionReport({ reports }) {
     <div className="connection-report">
       {reports.map((report, index) => (
         <span className={`connection-link ${report.classification}`} key={`${report.from}-${report.to}-${index}`}>
-          {nodeGlyph(report.from)}→{nodeGlyph(report.to)} // {report.classification} // d{report.distance ?? 'x'} // route {(report.route ?? []).length} // {formatStats(report.modifier)}
+          {nodeGlyph(report.from)}:{report.fromAnchor?.portId ?? report.fromPort ?? '?'}→{nodeGlyph(report.to)}:{report.toAnchor?.portId ?? report.toPort ?? '?'} // {report.classification} // d{report.distance ?? 'x'} // route {(report.route ?? []).length} // {formatStats(report.modifier)}
         </span>
       ))}
     </div>
@@ -109,9 +115,10 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
       <small>{blueprint.type} // {blueprint.nodeIds.length} nodes // {availability.available ? 'available' : 'blocked'}</small>
       <p>{blueprint.description}</p>
       {template && <p>Template: {template.name}. {template.description}</p>}
+      <p>Placements: {(blueprint.placements ?? []).map((placement) => `${nodeGlyph(placement.nodeId)} ${placementLabel(blueprint.placements ?? [], placement.nodeId)}`).join(' // ')}.</p>
       <TemplateGrid template={template} placedCells={placedCells} connectionMetrics={design.connectionMetrics} />
       <ConnectionReport reports={reports} />
-      <p>Port anchors: O = output, I = input. Routes now begin and end at edge-derived port cells.</p>
+      <p>Port anchors: O = output, I = input. Routes now use authored port IDs where available.</p>
       <p>Route congestion: {design.connectionMetrics?.congestion?.congestionPenalty ?? 0} penalty across {(design.connectionMetrics?.congestion?.congestedCells ?? []).length} congested cells.</p>
       <p>Layout modifiers: {formatStats(design.connectionMetrics?.summary ?? {})}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
