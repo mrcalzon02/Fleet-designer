@@ -37,6 +37,19 @@ function TemplateGrid({ template, placedCells = [] }) {
   );
 }
 
+function ConnectionReport({ reports }) {
+  if (!reports || reports.length === 0) return <p>Connections: none.</p>;
+  return (
+    <div className="connection-report">
+      {reports.map((report, index) => (
+        <span className={`connection-link ${report.classification}`} key={`${report.from}-${report.to}-${index}`}>
+          {nodeGlyph(report.from)}→{nodeGlyph(report.to)} // {report.classification} // d{report.distance ?? 'x'} // {formatStats(report.modifier)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function NodeCard({ node, unlocked }) {
   return (
     <div className={`data-card ${unlocked ? 'complete' : 'paused'}`}>
@@ -68,6 +81,7 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
   const footprint = availability.layout.footprint;
   const template = availability.layout.template;
   const placedCells = availability.layout.placedCells ?? [];
+  const reports = design.connectionMetrics?.reports ?? [];
   return (
     <div className={`data-card ${availability.available ? 'active' : 'paused'}`}>
       <strong>{blueprint.name}</strong>
@@ -75,11 +89,12 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
       <p>{blueprint.description}</p>
       {template && <p>Template: {template.name}. {template.description}</p>}
       <TemplateGrid template={template} placedCells={placedCells} />
+      <ConnectionReport reports={reports} />
+      <p>Layout modifiers: {formatStats(design.connectionMetrics?.summary ?? {})}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
       <p>Bill: {formatBill(design.bill)}.</p>
       <p>Chain effects: {formatStats(design.chainStats)}</p>
       <p>Layout: area {footprint.area}, span {footprint.width}w x {footprint.height}h, ports {footprint.inputs} in / {footprint.outputs} out, placed cells {footprint.placedCells}.</p>
-      <p>Connections: {(blueprint.connections ?? []).map((connection) => `${nodeGlyph(connection.from)}→${nodeGlyph(connection.to)}`).join(' // ') || 'none'}.</p>
       {!availability.nodeAccess && <p>Missing nodes: {availability.missingNodes.map((node) => node.name).join(', ')}.</p>}
       {!availability.layoutValid && <p>Layout issues: {availability.layout.issues.join('; ')}.</p>}
       <button onClick={() => onCreateDesign(blueprint.id)} disabled={!availability.available}>Create Prototype Design</button>
