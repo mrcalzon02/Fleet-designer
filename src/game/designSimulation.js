@@ -10,6 +10,15 @@ export const prototypeBlueprints = [
     type: 'component',
     layoutTemplateId: 'tpl-component-bench-small',
     nodeIds: ['node-crude-power-bus', 'node-jury-rigged-control-loop', 'node-slagged-heat-sink'],
+    placements: [
+      { nodeId: 'node-crude-power-bus', x: 0, y: 0 },
+      { nodeId: 'node-jury-rigged-control-loop', x: 2, y: 0 },
+      { nodeId: 'node-slagged-heat-sink', x: 2, y: 1 },
+    ],
+    connections: [
+      { from: 'node-crude-power-bus', to: 'node-jury-rigged-control-loop' },
+      { from: 'node-jury-rigged-control-loop', to: 'node-slagged-heat-sink' },
+    ],
     description: 'A cheap early component chain that technically regulates power, while producing heat, defect risk, and maintenance misery.',
     baseBill: { electronics: 2, hullPlate: 2 },
   },
@@ -19,6 +28,15 @@ export const prototypeBlueprints = [
     type: 'module',
     layoutTemplateId: 'tpl-module-crate-frame',
     nodeIds: ['node-riveted-frame-joint', 'node-basic-capacitor-bank', 'node-redundant-control-core'],
+    placements: [
+      { nodeId: 'node-riveted-frame-joint', x: 1, y: 0 },
+      { nodeId: 'node-basic-capacitor-bank', x: 2, y: 1 },
+      { nodeId: 'node-redundant-control-core', x: 2, y: 2 },
+    ],
+    connections: [
+      { from: 'node-riveted-frame-joint', to: 'node-basic-capacitor-bank' },
+      { from: 'node-basic-capacitor-bank', to: 'node-redundant-control-core' },
+    ],
     description: 'A mid-grade module chain that stabilizes structure and automation enough to support practical cargo work.',
     baseBill: { rawOre: 3, electronics: 3, hullPlate: 4 },
   },
@@ -28,6 +46,15 @@ export const prototypeBlueprints = [
     type: 'module',
     layoutTemplateId: 'tpl-module-drive-wedge',
     nodeIds: ['node-vector-plasma-drive', 'node-microchannel-cooler', 'node-basic-capacitor-bank'],
+    placements: [
+      { nodeId: 'node-vector-plasma-drive', x: 1, y: 1 },
+      { nodeId: 'node-microchannel-cooler', x: 2, y: 2 },
+      { nodeId: 'node-basic-capacitor-bank', x: 0, y: 3 },
+    ],
+    connections: [
+      { from: 'node-basic-capacitor-bank', to: 'node-vector-plasma-drive' },
+      { from: 'node-vector-plasma-drive', to: 'node-microchannel-cooler' },
+    ],
     description: 'A compact high-thrust propulsion chain with serious power and heat demands. Fast, expensive, and hungry.',
     baseBill: { volatiles: 3, electronics: 5, hullPlate: 3, driveCores: 1 },
   },
@@ -37,6 +64,17 @@ export const prototypeBlueprints = [
     type: 'vessel',
     layoutTemplateId: 'tpl-vessel-yard-hauler',
     nodeIds: ['node-compact-reactor-spine', 'node-lattice-frame-joint', 'node-redundant-control-core', 'node-microchannel-cooler'],
+    placements: [
+      { nodeId: 'node-compact-reactor-spine', x: 2, y: 1 },
+      { nodeId: 'node-lattice-frame-joint', x: 1, y: 2 },
+      { nodeId: 'node-redundant-control-core', x: 3, y: 3 },
+      { nodeId: 'node-microchannel-cooler', x: 4, y: 4 },
+    ],
+    connections: [
+      { from: 'node-compact-reactor-spine', to: 'node-redundant-control-core' },
+      { from: 'node-lattice-frame-joint', to: 'node-redundant-control-core' },
+      { from: 'node-redundant-control-core', to: 'node-microchannel-cooler' },
+    ],
     description: 'A late starter vessel chain built around compact power, better thermal control, and lighter structure.',
     baseBill: { rawOre: 8, volatiles: 3, electronics: 7, hullPlate: 8, driveCores: 2 },
   },
@@ -87,6 +125,7 @@ export function calculateBlueprintDesign(blueprint) {
   const nodes = nodesForBlueprint(blueprint);
   const stats = summarizeNodeStats(nodes);
   const tierWeight = sumNodeTier(nodes);
+  const layout = validateBlueprintLayout(blueprint);
   const typeBaseCost = blueprint.type === 'vessel' ? 1250000 : blueprint.type === 'module' ? 460000 : 190000;
   const typeBaseSale = blueprint.type === 'vessel' ? 2300000 : blueprint.type === 'module' ? 820000 : 360000;
 
@@ -113,8 +152,10 @@ export function calculateBlueprintDesign(blueprint) {
     licensePrice: Math.round(typeBaseSale * saleMultiplier * 2.8),
     bill: billWithNodePressure(blueprint.baseBill, stats, blueprint.type),
     chainStats: stats,
-    layoutFootprint: validateBlueprintLayout(blueprint).footprint,
+    layoutFootprint: layout.footprint,
     layoutTemplateId: blueprint.layoutTemplateId,
+    placements: blueprint.placements ?? [],
+    connections: blueprint.connections ?? [],
     nodeIds: blueprint.nodeIds,
     description: blueprint.description,
     defectRiskModifier: Math.round((stats.defectRisk ?? 0) - (stats.reliability ?? 0) * 0.15 + Math.max(0, stats.maintenance ?? 0) * 0.12),
