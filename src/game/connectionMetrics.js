@@ -1,5 +1,6 @@
+import { templateById } from './layoutTemplates.js';
 import { componentNodeLibrary } from './nodeLibrary.js';
-import { portForNode } from './nodePortRules.js';
+import { exactPortForNode, portForNode } from './nodePortRules.js';
 
 function nodeById(nodeId) {
   return componentNodeLibrary.find((node) => node.id === nodeId);
@@ -48,20 +49,28 @@ function edgeFallbackAnchor(blueprint, nodeId, direction, portIndex = 0) {
 function pickPortAnchor(blueprint, nodeId, direction, portRef = 0) {
   const node = nodeById(nodeId);
   const placement = placementForNode(blueprint, nodeId);
-  if (!node || !placement) return null;
+  if (!node || !placement) return { anchor: null, issue: `missing ${nodeId} placement or node` };
   const kind = direction === 'output' ? 'output' : 'input';
-  const authoredPort = portForNode(node, kind, placement.facing ?? 'east', portRef);
-  if (!authoredPort) return edgeFallbackAnchor(blueprint, nodeId, direction, portRef);
+  const facing = placement.facing ?? 'east';
+  const exact = exactPortForNode(node, kind, facing, portRef);
+  const authoredPort = exact.port ?? portForNode(node, kind, facing, portRef);
+  if (!authoredPort) {
+    const fallback = edgeFallbackAnchor(blueprint, nodeId, direction, portRef);
+    return { anchor: fallback, issue: exact.reason };
+  }
   return {
-    nodeId,
-    x: placement.x + authoredPort.x,
-    y: placement.y + authoredPort.y,
-    direction,
-    role: kind,
-    portId: authoredPort.id,
-    side: authoredPort.side,
-    facing: placement.facing ?? 'east',
-    source: 'authored-port',
+    anchor: {
+      nodeId,
+      x: placement.x + authoredPort.x,
+      y: placement.y + authoredPort.y,
+      direction,
+      role: kind,
+      portId: authoredPort.id,
+      side: authoredPort.side,
+      facing,
+      source: exact.found ? 'authored-port' : 'authored-fallback',
+    },
+    issue: exact.found ? null : exact.reason,
   };
 }
 
@@ -89,6 +98,32 @@ function routeBetweenCells(fromCell, toCell) {
   return route;
 }
 
+function templateAllows(blueprint, x, y) {
+  const template = templateById(blueprint.layoutTemplateId, blueprint.type);
+  return template?.grid?.[y]?.[x] === 'X';
+}
+
+function routeObstructions(blueprint, report) {
+  const occupied = new Map(placedCellsForBlueprint(blueprint).map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
+  const problems = [];
+  for (const cell of report.route ?? []) {
+    const key = `${cell.x},${cell.y}`;
+    if (!templateAllows(blueprint, cell.x, cell.y)) problems.push({ key, kind: 'blocked-cell' });
+    const occupant = occupied.get(key);
+    if (occupant && occupant !== report.from && occupant !== report.to) problems.push({ key, kind: 'foreign-node', occupant });
+  }
+  return problems;
+}
+
+function sideMismatch(fromAnchor, toAnchor) {
+  if (!fromAnchor || !toAnchor) return false;
+  const horizontal = Math.abs(fromAnchor.x - toAnchor.x) >= Math.abs(fromAnchor.y - toAnchor.y);
+  if (horizontal && fromAnchor.x <= toAnchor.x) return fromAnchor.side !== 'east' || toAnchor.side !== 'west';
+  if (horizontal && fromAnchor.x > toAnchor.x) return fromAnchor.side !== 'west' || toAnchor.side !== 'east';
+  if (!horizontal && fromAnchor.y <= toAnchor.y) return fromAnchor.side !== 'south' || toAnchor.side !== 'north';
+  return fromAnchor.side !== 'north' || toAnchor.side !== 'south';
+}
+
 export function classifyConnectionDistance(distance) {
   if (distance === null) return 'unplaced';
   if (distance <= 1) return 'adjacent';
@@ -111,6 +146,15 @@ function addModifier(summary, modifier) {
   }
 }
 
+function addPenalty(summary, amount) {
+  if (amount <= 0) return;
+  summary.reliability -= amount;
+  summary.efficiency -= Math.ceil(amount / 2);
+  summary.heat += amount * 2;
+  summary.defectRisk += amount * 2;
+  summary.cost += amount;
+}
+
 function addCongestion(summary, reports) {
   const routeUse = new Map();
   for (const report of reports) {
@@ -122,13 +166,7 @@ function addCongestion(summary, reports) {
 
   const congestedCells = [...routeUse.entries()].filter(([, count]) => count > 1);
   const congestionPenalty = congestedCells.reduce((sum, [, count]) => sum + count - 1, 0);
-  if (congestionPenalty > 0) {
-    summary.reliability -= congestionPenalty;
-    summary.efficiency -= congestionPenalty;
-    summary.heat += congestionPenalty * 2;
-    summary.defectRisk += congestionPenalty * 2;
-    summary.cost += congestionPenalty;
-  }
+  addPenalty(summary, congestionPenalty);
 
   return {
     routeUse: [...routeUse.entries()].map(([key, count]) => ({ key, count })),
@@ -140,18 +178,28 @@ function addCongestion(summary, reports) {
 export function calculateConnectionMetrics(blueprint) {
   const summary = { reliability: 0, efficiency: 0, heat: 0, defectRisk: 0, cost: 0 };
   const portAnchors = [];
+  const issues = [];
   const reports = (blueprint.connections ?? []).map((connection) => {
-    const fromAnchor = pickPortAnchor(blueprint, connection.from, 'output', connection.fromPort ?? 0);
-    const toAnchor = pickPortAnchor(blueprint, connection.to, 'input', connection.toPort ?? 0);
+    const from = pickPortAnchor(blueprint, connection.from, 'output', connection.fromPort ?? 0);
+    const to = pickPortAnchor(blueprint, connection.to, 'input', connection.toPort ?? 0);
+    const fromAnchor = from.anchor;
+    const toAnchor = to.anchor;
+    if (from.issue) issues.push(`${connection.from}: ${from.issue}`);
+    if (to.issue) issues.push(`${connection.to}: ${to.issue}`);
     const distance = distanceBetween(fromAnchor, toAnchor);
     const classification = classifyConnectionDistance(distance);
     const modifier = modifiersForClass(classification);
     const route = routeBetweenCells(fromAnchor, toAnchor);
+    const report = { ...connection, distance, classification, modifier, route, fromCell: fromAnchor, toCell: toAnchor, fromAnchor, toAnchor };
+    report.obstructions = routeObstructions(blueprint, report);
+    report.sideMismatch = sideMismatch(fromAnchor, toAnchor);
+    if (report.sideMismatch) issues.push(`${connection.from}->${connection.to}: port side mismatch`);
+    addModifier(summary, modifier);
+    addPenalty(summary, report.obstructions.length + (report.sideMismatch ? 2 : 0));
     if (fromAnchor) portAnchors.push({ ...fromAnchor, role: 'output', nodeId: connection.from });
     if (toAnchor) portAnchors.push({ ...toAnchor, role: 'input', nodeId: connection.to });
-    addModifier(summary, modifier);
-    return { ...connection, distance, classification, modifier, route, fromCell: fromAnchor, toCell: toAnchor, fromAnchor, toAnchor };
+    return report;
   });
   const congestion = addCongestion(summary, reports);
-  return { reports, summary, congestion, portAnchors };
+  return { reports, summary, congestion, portAnchors, issues };
 }
