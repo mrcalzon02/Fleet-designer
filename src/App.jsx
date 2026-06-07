@@ -8,6 +8,7 @@ import { OperationsPanels } from './components/OperationsPanels.jsx';
 import { ProductionPanels } from './components/ProductionPanels.jsx';
 import { initialGameState } from './game/initialState.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
+import { buySpotMaterial, toggleSupplyContract } from './game/supplySimulation.js';
 import {
   acceptContract,
   advanceCycle,
@@ -29,6 +30,7 @@ function App() {
   ]);
   const [productionQuantities, setProductionQuantities] = useState({});
   const [lotQuantities, setLotQuantities] = useState({});
+  const [procurementQuantities, setProcurementQuantities] = useState({});
 
   const openContracts = game.contracts.filter((contract) => contract.status === 'open');
   const acceptedContracts = game.contracts.filter((contract) => contract.status === 'accepted');
@@ -75,14 +77,17 @@ function App() {
     setLotQuantities((current) => ({ ...current, [lotId]: value }));
   }
 
+  function getProcurementQuantity(material) {
+    return procurementQuantities[material] ?? 1;
+  }
+
+  function setProcurementQuantity(material, value) {
+    setProcurementQuantities((current) => ({ ...current, [material]: value }));
+  }
+
   return (
     <main className="app-shell">
-      <CompanyHeader
-        company={game.company}
-        activeWorkUnits={activeWorkUnits}
-        warehouseUsed={warehouseUsed}
-        onAdvanceCycle={handleAdvanceCycle}
-      />
+      <CompanyHeader company={game.company} activeWorkUnits={activeWorkUnits} warehouseUsed={warehouseUsed} onAdvanceCycle={handleAdvanceCycle} />
 
       <FinancialOverview
         cashHistory={cashHistory}
@@ -123,11 +128,17 @@ function App() {
 
       <InventoryWarehousePanels
         inventory={game.inventory}
+        commodities={game.commodities}
+        supplyContracts={game.supplyContracts}
         finishedGoods={game.finishedGoods}
         warehouseUsed={warehouseUsed}
         warehouseCapacity={game.company.warehouseCapacity}
         getLotQuantity={getLotQuantity}
         setLotQuantity={setLotQuantity}
+        getProcurementQuantity={getProcurementQuantity}
+        setProcurementQuantity={setProcurementQuantity}
+        onBuySpotMaterial={(material, quantity) => applyAction((state) => buySpotMaterial(state, material, quantity))}
+        onToggleSupplyContract={(contractId) => applyAction((state) => toggleSupplyContract(state, contractId))}
         onSellFinishedGood={(lotId, quantity) => applyAction((state) => sellFinishedGood(state, lotId, quantity))}
         onDeliverContractStock={(contractId, quantity) => applyAction((state) => deliverContractStock(state, contractId, quantity))}
       />
