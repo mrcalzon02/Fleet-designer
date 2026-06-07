@@ -7,6 +7,7 @@ import { InventoryWarehousePanels } from './components/InventoryWarehousePanels.
 import { OperationsPanels } from './components/OperationsPanels.jsx';
 import { ProductionPanels } from './components/ProductionPanels.jsx';
 import { initialGameState } from './game/initialState.js';
+import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
 import {
   acceptContract,
   advanceCycle,
@@ -133,10 +134,13 @@ function App() {
 
       <OperationsPanels
         research={game.research}
+        engineers={game.engineers}
         marketListings={game.marketListings}
         eventLog={game.eventLog}
         companyName={game.company.name}
         onBuyLicense={(listingId) => applyAction((state) => buyLicense(state, listingId))}
+        onAssignEngineer={(engineerId, projectId) => applyAction((state) => assignEngineerToProject(state, engineerId, projectId))}
+        onUnassignEngineer={(engineerId) => applyAction((state) => unassignEngineer(state, engineerId))}
       />
 
       <AssetPreview />
