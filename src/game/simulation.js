@@ -1,5 +1,6 @@
 import { progressResearchProjects } from './researchSimulation.js';
 import { processSupplyContracts, updateCommodityPrices } from './supplySimulation.js';
+import { processWarehouseAging } from './warehouseSimulation.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -89,6 +90,8 @@ function addFinishedGoods(next, run) {
     qaResult: run.qaResult,
     status: run.revenueMode === 'contract' ? 'reserved-contract' : 'available-market',
     createdCycle: next.company.cycle,
+    age: 0,
+    inspected: false,
   };
   next.finishedGoods.push(lot);
   run.stockLotId = lot.id;
@@ -97,7 +100,11 @@ function addFinishedGoods(next, run) {
 
 function calculateMarketRevenue(lot, quantity) {
   const gross = lot.unitSalePrice * quantity;
-  return lot.qaResult === 'defective' ? Math.round(gross * 0.55) : gross;
+  let multiplier = lot.qaResult === 'defective' ? 0.55 : 1;
+  if (lot.status === 'stale-market') multiplier -= 0.18;
+  if (lot.marketDiscount) multiplier -= lot.marketDiscount;
+  if (lot.marketBonus) multiplier += lot.marketBonus;
+  return Math.round(gross * Math.max(0.2, multiplier));
 }
 
 function calculateContractPayout(contract, lot, quantity) {
@@ -303,7 +310,7 @@ export function buyLicense(state, listingId) {
 export function sellFinishedGood(state, lotId, quantity = 1) {
   const next = clone(state);
   const lot = next.finishedGoods.find((item) => item.id === lotId);
-  if (!lot || lot.status !== 'available-market' || lot.availableQuantity <= 0) return next;
+  if (!lot || !['available-market', 'stale-market'].includes(lot.status) || lot.availableQuantity <= 0) return next;
 
   const sellQuantity = Math.min(normalizeQuantity(quantity), lot.availableQuantity);
   const revenue = calculateMarketRevenue(lot, sellQuantity);
@@ -445,6 +452,7 @@ export function advanceCycle(state) {
   const capacityUsed = allocateFactoryCapacity(next);
   progressResearchProjects(next);
   processSupplyContracts(next);
+  processWarehouseAging(next);
   updateCommodityPrices(next);
   resolveContractDeadlines(next);
 
@@ -452,7 +460,7 @@ export function advanceCycle(state) {
     next.company.status = 'bankrupt';
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Bankruptcy triggered. Welcome to the intergalactic breadline.`);
   } else {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Burn paid, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply contracts processed.`);
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Burn paid, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply and warehouse costs processed.`);
   }
 
   next.eventLog = next.eventLog.slice(0, 18);
