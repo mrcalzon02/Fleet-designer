@@ -1,7 +1,34 @@
+import { technologyTree } from './nodeLibrary.js';
+
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function projectEngineers(state, projectId) {
   return state.engineers.filter((engineer) => engineer.assignedProjectId === projectId);
+}
+
+function unlockTechnology(next, techId) {
+  if (!techId) return;
+  const tech = technologyTree.find((item) => item.id === techId);
+  if (!tech) return;
+
+  next.company.unlockedTechIds = next.company.unlockedTechIds ?? [];
+  next.company.unlockedNodeIds = next.company.unlockedNodeIds ?? [];
+
+  if (!next.company.unlockedTechIds.includes(tech.id)) {
+    next.company.unlockedTechIds.push(tech.id);
+  }
+
+  const unlocked = [];
+  for (const nodeId of tech.unlocks ?? []) {
+    if (!next.company.unlockedNodeIds.includes(nodeId)) {
+      next.company.unlockedNodeIds.push(nodeId);
+      unlocked.push(nodeId);
+    }
+  }
+
+  if (unlocked.length > 0) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Technology unlocked - ${tech.name}. New component nodes available: ${unlocked.join(', ')}.`);
+  }
 }
 
 export function calculateResearchProgress(state, project) {
@@ -75,6 +102,7 @@ export function progressResearchProjects(next) {
       }
       if (project.discipline === 'supply chain') next.company.burnRate = Math.round(next.company.burnRate * 0.94);
       if (project.discipline === 'manufacturing') next.company.factoryCapacity += 1;
+      unlockTechnology(next, project.unlockTechId);
       next.eventLog.unshift(`Cycle ${next.company.cycle}: Research complete - ${project.name}. ${project.effect}.`);
     }
   }
