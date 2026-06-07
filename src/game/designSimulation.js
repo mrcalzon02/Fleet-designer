@@ -63,6 +63,17 @@ function billWithNodePressure(baseBill, stats, type) {
   return bill;
 }
 
+export function blueprintAvailability(state, blueprint) {
+  const unlocked = new Set(state.company?.unlockedNodeIds ?? []);
+  const missingNodeIds = (blueprint.nodeIds ?? []).filter((nodeId) => !unlocked.has(nodeId));
+  const missingNodes = componentNodeLibrary.filter((node) => missingNodeIds.includes(node.id));
+  return {
+    available: missingNodeIds.length === 0,
+    missingNodeIds,
+    missingNodes,
+  };
+}
+
 export function calculateBlueprintDesign(blueprint) {
   const nodes = nodesForBlueprint(blueprint);
   const stats = summarizeNodeStats(nodes);
@@ -103,6 +114,13 @@ export function createDesignFromBlueprint(state, blueprintId) {
   const next = clone(state);
   const blueprint = prototypeBlueprints.find((item) => item.id === blueprintId);
   if (!blueprint) return next;
+
+  const availability = blueprintAvailability(next, blueprint);
+  if (!availability.available) {
+    const missing = availability.missingNodes.map((node) => node.name).join(', ');
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Prototype blocked. Missing node access for ${blueprint.name}: ${missing}.`);
+    return next;
+  }
 
   const design = calculateBlueprintDesign(blueprint);
   const existingCount = next.designs.filter((item) => item.sourceBlueprintId === blueprint.id).length;
