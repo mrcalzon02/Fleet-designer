@@ -1,3 +1,4 @@
+import { validateBlueprintLayout } from './layoutValidation.js';
 import { componentNodeLibrary, summarizeNodeStats } from './nodeLibrary.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -67,10 +68,14 @@ export function blueprintAvailability(state, blueprint) {
   const unlocked = new Set(state.company?.unlockedNodeIds ?? []);
   const missingNodeIds = (blueprint.nodeIds ?? []).filter((nodeId) => !unlocked.has(nodeId));
   const missingNodes = componentNodeLibrary.filter((node) => missingNodeIds.includes(node.id));
+  const layout = validateBlueprintLayout(blueprint);
   return {
-    available: missingNodeIds.length === 0,
+    available: missingNodeIds.length === 0 && layout.valid,
+    nodeAccess: missingNodeIds.length === 0,
+    layoutValid: layout.valid,
     missingNodeIds,
     missingNodes,
+    layout,
   };
 }
 
@@ -104,6 +109,7 @@ export function calculateBlueprintDesign(blueprint) {
     licensePrice: Math.round(typeBaseSale * saleMultiplier * 2.8),
     bill: billWithNodePressure(blueprint.baseBill, stats, blueprint.type),
     chainStats: stats,
+    layoutFootprint: validateBlueprintLayout(blueprint).footprint,
     nodeIds: blueprint.nodeIds,
     description: blueprint.description,
     defectRiskModifier: Math.round((stats.defectRisk ?? 0) - (stats.reliability ?? 0) * 0.15 + Math.max(0, stats.maintenance ?? 0) * 0.12),
@@ -116,9 +122,14 @@ export function createDesignFromBlueprint(state, blueprintId) {
   if (!blueprint) return next;
 
   const availability = blueprintAvailability(next, blueprint);
-  if (!availability.available) {
+  if (!availability.nodeAccess) {
     const missing = availability.missingNodes.map((node) => node.name).join(', ');
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Prototype blocked. Missing node access for ${blueprint.name}: ${missing}.`);
+    return next;
+  }
+
+  if (!availability.layoutValid) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Prototype blocked. Layout invalid for ${blueprint.name}: ${availability.layout.issues.join('; ')}.`);
     return next;
   }
 
