@@ -163,6 +163,10 @@ export const contractTemplates = [
   },
 ];
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 export function skullLabel(skulls = 1) {
   return `${'☠'.repeat(Math.max(1, Math.min(3, skulls)))} ${skulls}-skull`;
 }
@@ -171,14 +175,24 @@ export function contractSourceById(sourceId) {
   return contractSources.find((source) => source.id === sourceId);
 }
 
-function companyAlignmentScore(company, source) {
+export function sourceRelationshipScore(company, source) {
   const alignments = company.alignmentFactors ?? {};
   const sourceRep = company.sourceReputation?.[source.reputationKey] ?? 0;
   return (alignments[source.alignment] ?? 0) + sourceRep;
 }
 
+export function sourceRelationshipTier(score = 0) {
+  if (score >= 36) return 'strategic partner';
+  if (score >= 24) return 'preferred client channel';
+  if (score >= 14) return 'trusted client channel';
+  if (score >= 5) return 'working relationship';
+  if (score >= -4) return 'cold relationship';
+  if (score >= -14) return 'strained relationship';
+  return 'hostile market reputation';
+}
+
 export function sourceAvailableToCompany(company, source) {
-  return (company.reputation ?? 0) + companyAlignmentScore(company, source) >= source.minReputation;
+  return (company.reputation ?? 0) + sourceRelationshipScore(company, source) >= source.minReputation;
 }
 
 function seededPick(items, seed) {
@@ -186,10 +200,49 @@ function seededPick(items, seed) {
   return items[Math.abs(seed) % items.length];
 }
 
-function skullsForCompany(company, seed) {
+function weightedSourcePick(sources, company, seed) {
+  const weightedPool = [];
+  for (const source of sources) {
+    const relationship = sourceRelationshipScore(company, source);
+    const relationshipWeight = clamp(2 + Math.floor((relationship + 10) / 6), 1, 10);
+    const reputationWeight = (company.reputation ?? 0) >= source.minReputation + 15 ? 2 : 0;
+    const premiumDrag = source.minReputation >= 38 && relationship < 8 ? -1 : 0;
+    const weight = clamp(relationshipWeight + reputationWeight + premiumDrag, 1, 12);
+    for (let index = 0; index < weight; index += 1) weightedPool.push(source);
+  }
+  return seededPick(weightedPool, seed);
+}
+
+function fallbackSourcesForCompany(company) {
+  const lowTrustSources = contractSources.filter((source) => ['salvage', 'frontier', 'industrial'].includes(source.alignment));
+  if ((company.reputation ?? 0) < 10) return lowTrustSources.filter((source) => source.alignment !== 'industrial');
+  return lowTrustSources;
+}
+
+function relationshipPayoutMultiplier(relationshipScore) {
+  return 1 + clamp(relationshipScore, -20, 35) / 140;
+}
+
+function relationshipDeadlineModifier(relationshipScore, skulls) {
+  if (relationshipScore >= 24 && skulls <= 2) return 1;
+  if (relationshipScore <= -8) return -1;
+  return 0;
+}
+
+function relationshipRequirementModifier(relationshipScore, skulls) {
+  if (relationshipScore >= 24 && skulls >= 2) return 3;
+  if (relationshipScore >= 14 && skulls >= 2) return 1;
+  if (relationshipScore <= -8) return -2;
+  return 0;
+}
+
+function skullsForCompany(company, source, seed) {
   const reputation = company.reputation ?? 0;
-  if (reputation >= 55 && seed % 5 === 0) return 3;
-  if (reputation >= 32 && seed % 3 !== 0) return 2;
+  const relationship = sourceRelationshipScore(company, source);
+  if (reputation >= 58 && relationship >= 24 && seed % 4 === 0) return 3;
+  if (reputation >= 50 && relationship >= 36 && seed % 3 === 0) return 3;
+  if (reputation >= 34 && relationship >= 6 && seed % 3 !== 0) return 2;
+  if (reputation >= 42 && relationship >= 14 && seed % 5 !== 0) return 2;
   return 1;
 }
 
@@ -207,13 +260,15 @@ function titleFor(source, template, skulls, cycle) {
   return `${prefix} ${template.titleNoun}`;
 }
 
-function difficultyTerms(source, template, skulls) {
+function difficultyTerms(source, template, skulls, relationshipScore) {
+  const relationshipReward = relationshipPayoutMultiplier(relationshipScore);
+  const requirementModifier = relationshipRequirementModifier(relationshipScore, skulls);
   const quantity = Math.max(1, Math.round(template.baseQuantity * (skulls === 1 ? 1 : skulls === 2 ? 1.45 : 2.1)));
-  const reward = Math.round(template.baseReward * quantity * source.payoutBias * (skulls === 1 ? 0.85 : skulls === 2 ? 1.22 : 1.75));
+  const reward = Math.round(template.baseReward * quantity * source.payoutBias * relationshipReward * (skulls === 1 ? 0.85 : skulls === 2 ? 1.22 : 1.75));
   const penalty = Math.round(template.basePenalty * (skulls === 1 ? 0.75 : skulls === 2 ? 1.25 : 1.85));
-  const deadline = Math.max(3, Math.round(template.baseDeadline + (skulls === 1 ? 3 : skulls === 2 ? 0 : -2)));
-  const minQuality = Math.max(0, Math.round(35 + source.qualityBias + (skulls - 1) * 12));
-  const minReliability = Math.max(0, Math.round(38 + source.reliabilityBias + (skulls - 1) * 11));
+  const deadline = Math.max(3, Math.round(template.baseDeadline + (skulls === 1 ? 3 : skulls === 2 ? 0 : -2) + relationshipDeadlineModifier(relationshipScore, skulls)));
+  const minQuality = Math.max(0, Math.round(35 + source.qualityBias + (skulls - 1) * 12 + requirementModifier));
+  const minReliability = Math.max(0, Math.round(38 + source.reliabilityBias + (skulls - 1) * 11 + requirementModifier));
   const precision = skulls === 1 ? 'loose acceptance' : skulls === 2 ? 'documented acceptance' : 'exacting acceptance';
   return { quantity, reward, penalty, deadline, minQuality, minReliability, precision };
 }
@@ -223,11 +278,14 @@ export function generateContractForCompany(state, seedOffset = 0) {
   const cycle = company.cycle ?? 1;
   const seed = cycle * 17 + seedOffset * 31 + (company.reputation ?? 0);
   const eligibleSources = contractSources.filter((source) => sourceAvailableToCompany(company, source));
-  const source = seededPick(eligibleSources.length ? eligibleSources : contractSources.slice(0, 3), seed);
+  const sourcePool = eligibleSources.length ? eligibleSources : fallbackSourcesForCompany(company);
+  const source = weightedSourcePick(sourcePool.length ? sourcePool : contractSources.slice(0, 3), company, seed);
+  const relationshipScore = sourceRelationshipScore(company, source);
+  const relationshipTier = sourceRelationshipTier(relationshipScore);
   const preferredTemplates = contractTemplates.filter((template) => source.preferredTypes.includes(template.requiredType));
   const template = seededPick(preferredTemplates.length ? preferredTemplates : contractTemplates, seed + source.id.length);
-  const skulls = skullsForCompany(company, seed + template.id.length);
-  const terms = difficultyTerms(source, template, skulls);
+  const skulls = skullsForCompany(company, source, seed + template.id.length);
+  const terms = difficultyTerms(source, template, skulls, relationshipScore);
   const deadline = cycle + terms.deadline;
   return {
     id: `ct-gen-${cycle}-${seedOffset}-${source.id}`,
@@ -250,6 +308,9 @@ export function generateContractForCompany(state, seedOffset = 0) {
     earnedReward: 0,
     skulls,
     precision: terms.precision,
+    relationshipScore,
+    relationshipTier,
+    relationshipPayoutMultiplier: Number(relationshipPayoutMultiplier(relationshipScore).toFixed(2)),
     minCompanyReputation: source.minReputation,
     minQuality: terms.minQuality,
     minReliability: terms.minReliability,
@@ -265,7 +326,7 @@ export function replenishOpenContracts(next, targetOpenContracts = 5) {
     const generated = generateContractForCompany(next, index + next.contracts.length);
     if (!next.contracts.some((contract) => contract.id === generated.id)) {
       next.contracts.push(generated);
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: New ${skullLabel(generated.skulls)} contract posted by ${generated.client}: ${generated.title}.`);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: New ${skullLabel(generated.skulls)} ${generated.relationshipTier} contract posted by ${generated.client}: ${generated.title}.`);
     }
   }
 }
