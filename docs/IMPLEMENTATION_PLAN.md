@@ -20,20 +20,21 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, supplier procurement, and refinery processing.
+Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, supplier procurement, refinery processing, and warehouse operations.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
 Implemented core work:
 
 - Company state: cash, reputation, cycle, burn rate, bankruptcy.
-- Turn advancement: burn rate, assigned-engineer research progress, priority-based factory allocation, supplier contract processing, refinery job processing, commodity price movement, contract deadline checks.
+- Turn advancement: burn rate, assigned-engineer research progress, priority-based factory allocation, supplier contract processing, refinery job processing, warehouse stock aging, storage cost processing, commodity price movement, contract deadline checks.
 - Contract board: accept contracts with deadline, spec, reward, penalty, and compatible starter designs.
 - Contract-specific production: accepted contracts now require their own queued production run.
 - Quantity production: market production can now be queued in variable quantities from the cockpit UI.
 - Factory capacity allocation: factory output is now spent once per cycle across active runs in priority order rather than duplicated across every run.
 - Queue management: production runs can be set to high, normal, or low priority; paused and resumed; or canceled for partial salvage.
 - Finished goods warehouse: completed production now creates stock lots rather than immediately paying out.
+- Warehouse operations: stock ages, active stock costs money to store, market stock can become stale, lots can be inspected, and lots can be scrapped for salvage.
 - Market sales: market stock lots can be sold manually after production completes, including partial lot sales.
 - Contract delivery: reserved contract stock lots can be delivered manually after production completes, including partial contract delivery.
 - Contract progress tracking: contracts now track delivered quantity and earned reward.
@@ -67,14 +68,16 @@ Recently fixed:
 - Added `supplySimulation.js` to keep commodity pricing, spot buys, supplier contract processing, and refinery jobs out of the main simulation file.
 - Replaced the free automatic restock with player-controlled spot purchases and paid supplier contracts.
 - Added refinery recipes, refinery capacity, refinery job queuing, and refinery queue display.
+- Added `warehouseSimulation.js` to keep storage costs, aging, inspection, and scrapping out of the main simulation file.
+- Added warehouse inspection and scrapping controls to the finished-goods panel.
 
 Known limitations to fix before calling Phase 1 complete:
 
-- Stock lots can be partially consumed but not manually split, merged, scrapped, inspected, or reclassified.
+- Stock lots can be partially consumed, inspected, and scrapped, but not manually split, merged, or reclassified.
 - Contract production still auto-builds the remaining needed amount rather than letting the player choose overproduction or staged batches.
-- Procurement has spot prices, supplier contracts, and refinery conversion, but no supplier reputation, route risk, storage costs, negotiated terms, or refinery upgrades yet.
+- Procurement has spot prices, supplier contracts, and refinery conversion, but no supplier reputation, route risk, negotiated terms, or refinery upgrades yet.
 - Engineer hiring, firing, training, salary pressure, burnout events, and deep specialization are not implemented yet.
-- Warehouse capacity is checked at queue time, but there is not yet a cost for storage, warehousing upgrades, or stock aging.
+- Warehouse capacity and storage costs exist, but there are not yet warehousing upgrades, cold storage, insurance, or stock reservation policies.
 - The simulation file is now the next place to watch for growth; future mechanics should be split by domain when it becomes harder to read.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
