@@ -312,6 +312,14 @@ h1 {
   color: rgba(122, 145, 153, 0.5);
   background: rgba(122, 145, 153, 0.04);
 }
+.template-cell.occupied {
+  color: #05070a;
+  background: #ffb800;
+  border-color: rgba(255, 184, 0, 0.95);
+  font-weight: 900;
+  font-size: 0.58rem;
+  letter-spacing: -0.08em;
+}
 
 .event-log {
   display: grid;
