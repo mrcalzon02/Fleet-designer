@@ -2,12 +2,17 @@ import { skullLabel } from '../game/contractContent.js';
 import { designMeetsContractPressure, formatCredits } from '../game/simulation.js';
 import { QuantityControl } from './QuantityControl.jsx';
 
+function relationshipText(contract) {
+  if (!contract.relationshipTier) return null;
+  return `relationship ${contract.relationshipTier} // score ${contract.relationshipScore ?? 0} // payout ${contract.relationshipPayoutMultiplier ?? 1}x`;
+}
+
 export function ContractBoard({ contracts, designs, productionRuns, finishedGoods, getLotQuantity, setLotQuantity, onAcceptContract, onQueueContractProduction, onDeliverContractStock }) {
   return (
     <article className="console-panel tall-panel">
       <div className="panel-heading">
         <span>Contract Board</span>
-        <small>source factions, skulls, reputation gates</small>
+        <small>source factions, skulls, relationship-shaped terms</small>
       </div>
       <div className="stack-list">
         {contracts.map((contract) => {
@@ -18,11 +23,13 @@ export function ContractBoard({ contracts, designs, productionRuns, finishedGood
           const deliverQty = stockLot ? getLotQuantity(`contract-${stockLot.id}`, Math.min(stockLot.availableQuantity, remaining)) : 1;
           const displayDeadline = contract.acceptedDeadline ?? contract.effectiveDeadline ?? contract.deadline;
           const skulls = contract.skulls ?? 1;
+          const relation = relationshipText(contract);
           return (
             <div className={`data-card ${contract.status} ${contract.contestedBy ? 'paused' : ''}`} key={contract.id}>
               <strong>{contract.title}</strong>
               <small>{contract.client} // {contract.category} // {skullLabel(skulls)}</small>
               <p>Source: {contract.sourceType ?? 'legacy client'} // alignment {contract.alignment ?? 'commercial'} // terms {contract.precision ?? 'standard acceptance'}.</p>
+              {relation && <p>Client channel: {relation}.</p>}
               <p>Need {contract.quantity} x {contract.requiredType}. Delivered {contract.deliveredQuantity ?? 0}/{contract.quantity}. Deadline C{displayDeadline}. Reward {formatCredits(contract.reward)}. Penalty {formatCredits(contract.penalty)}.</p>
               <p>Minimum acceptance: quality {contract.minQuality ?? 0}, reliability {contract.minReliability ?? 0}. Reputation gate {contract.minCompanyReputation ?? 0}.</p>
               {contract.description && <p>{contract.description}</p>}
