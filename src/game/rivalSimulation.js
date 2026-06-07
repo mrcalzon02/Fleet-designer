@@ -82,6 +82,40 @@ function maybeGenerateRivalListing(next, rival) {
   next.eventLog.unshift(`Cycle ${next.company.cycle}: Rival market - ${rival.name} listed ${listing.designName} license for CR ${listing.price.toLocaleString('en-US')}.`);
 }
 
+function contractMatchesRival(contract, rival) {
+  if (contract.requiredType === 'module') return (rival.preferredModuleCategories ?? []).length > 0;
+  if (contract.requiredType === 'vessel') return (rival.preferredVehicleClasses ?? []).length > 0;
+  return true;
+}
+
+function contestRequirementsFor(rival, contract, cycle) {
+  const pressure = Math.max(0.5, (rival.contractBidAggression ?? 0.5) + (rival.marketShare ?? 1) / 100);
+  const minQuality = Math.max(contract.minQuality ?? 0, Math.min(88, Math.round(42 + (rival.techLevel ?? 1) * 4 + pressure * 6)));
+  const minReliability = Math.max(contract.minReliability ?? 0, Math.min(90, Math.round(45 + (rival.techLevel ?? 1) * 3 + pressure * 5)));
+  const deadlinePressure = Math.max(0, Math.min(3, Math.round(pressure)));
+  const effectiveDeadline = Math.max(cycle + 2, (contract.deadline ?? cycle + 4) - deadlinePressure);
+  return { minQuality, minReliability, effectiveDeadline, pressure: Number(pressure.toFixed(2)) };
+}
+
+function maybeContestContract(next, rival) {
+  const openContracts = (next.contracts ?? []).filter((contract) => contract.status === 'open' && !contract.contestedBy && contractMatchesRival(contract, rival));
+  if (openContracts.length === 0) return;
+  const contestChance = Math.min(0.35, 0.05 + (rival.contractBidAggression ?? 0.5) * 0.08 + (rival.marketShare ?? 1) / 180);
+  if (Math.random() > contestChance) return;
+
+  const contract = openContracts[Math.abs((next.company.cycle ?? 0) + rival.id.length) % openContracts.length];
+  const requirements = contestRequirementsFor(rival, contract, next.company.cycle ?? 0);
+  contract.contestedBy = rival.name;
+  contract.contestedById = rival.id;
+  contract.contestedCycle = next.company.cycle;
+  contract.contestPressure = requirements.pressure;
+  contract.minQuality = requirements.minQuality;
+  contract.minReliability = requirements.minReliability;
+  contract.effectiveDeadline = requirements.effectiveDeadline;
+  rival.lastAction = `Contested contract: ${contract.title}.`;
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Rival contract pressure - ${rival.name} contested ${contract.title}. Minimum quality ${contract.minQuality}, reliability ${contract.minReliability}, effective deadline C${contract.effectiveDeadline}.`);
+}
+
 export function instantiateRivalCompany(template, index = 0, difficultyId = 'normal') {
   const seed = seedFromText(template.id) + index * 37;
   const aggressionPressure = difficultyMultiplier({ company: { difficultyId } }, 'rivalAggression');
@@ -151,6 +185,7 @@ export function advanceRivalCompanies(next) {
     }
 
     maybeGenerateRivalListing(next, rival);
+    maybeContestContract(next, rival);
   }
 }
 
