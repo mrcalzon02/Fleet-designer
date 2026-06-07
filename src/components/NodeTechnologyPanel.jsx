@@ -11,17 +11,26 @@ function formatBill(bill) {
   return Object.entries(bill ?? {}).map(([key, value]) => `${key} ${value}`).join(' // ');
 }
 
-function TemplateGrid({ template }) {
+function nodeGlyph(nodeId) {
+  const node = componentNodeLibrary.find((item) => item.id === nodeId);
+  return node?.name?.slice(0, 2).toUpperCase() ?? '??';
+}
+
+function TemplateGrid({ template, placedCells = [] }) {
   if (!template) return null;
+  const placed = new Map(placedCells.map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
   return (
     <div className="template-grid" aria-label={`${template.name} grid`}>
       {template.grid.map((row, rowIndex) => (
         <div className="template-row" key={`${template.id}-${rowIndex}`}>
-          {[...row].map((cell, cellIndex) => (
-            <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'}`} key={`${rowIndex}-${cellIndex}`}>
-              {cell === 'X' ? '■' : '·'}
-            </span>
-          ))}
+          {[...row].map((cell, cellIndex) => {
+            const placedNodeId = placed.get(`${cellIndex},${rowIndex}`);
+            return (
+              <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'} ${placedNodeId ? 'occupied' : ''}`} key={`${rowIndex}-${cellIndex}`} title={placedNodeId ?? ''}>
+                {placedNodeId ? nodeGlyph(placedNodeId) : cell === 'X' ? '■' : '·'}
+              </span>
+            );
+          })}
         </div>
       ))}
     </div>
@@ -58,17 +67,19 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
   const availability = blueprintAvailability(game, blueprint);
   const footprint = availability.layout.footprint;
   const template = availability.layout.template;
+  const placedCells = availability.layout.placedCells ?? [];
   return (
     <div className={`data-card ${availability.available ? 'active' : 'paused'}`}>
       <strong>{blueprint.name}</strong>
       <small>{blueprint.type} // {blueprint.nodeIds.length} nodes // {availability.available ? 'available' : 'blocked'}</small>
       <p>{blueprint.description}</p>
       {template && <p>Template: {template.name}. {template.description}</p>}
-      <TemplateGrid template={template} />
+      <TemplateGrid template={template} placedCells={placedCells} />
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
       <p>Bill: {formatBill(design.bill)}.</p>
       <p>Chain effects: {formatStats(design.chainStats)}</p>
-      <p>Layout: area {footprint.area}, span {footprint.width}w x {footprint.height}h, ports {footprint.inputs} in / {footprint.outputs} out.</p>
+      <p>Layout: area {footprint.area}, span {footprint.width}w x {footprint.height}h, ports {footprint.inputs} in / {footprint.outputs} out, placed cells {footprint.placedCells}.</p>
+      <p>Connections: {(blueprint.connections ?? []).map((connection) => `${nodeGlyph(connection.from)}→${nodeGlyph(connection.to)}`).join(' // ') || 'none'}.</p>
       {!availability.nodeAccess && <p>Missing nodes: {availability.missingNodes.map((node) => node.name).join(', ')}.</p>}
       {!availability.layoutValid && <p>Layout issues: {availability.layout.issues.join('; ')}.</p>}
       <button onClick={() => onCreateDesign(blueprint.id)} disabled={!availability.available}>Create Prototype Design</button>
