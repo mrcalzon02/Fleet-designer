@@ -24,16 +24,25 @@ function cellsForNode(blueprint, nodeId) {
   return placedCellsForBlueprint(blueprint).filter((cell) => cell.nodeId === nodeId);
 }
 
-function bestCellPair(fromCells, toCells) {
-  if (fromCells.length === 0 || toCells.length === 0) return { fromCell: null, toCell: null, distance: null };
-  let best = { fromCell: null, toCell: null, distance: Number.POSITIVE_INFINITY };
-  for (const fromCell of fromCells) {
-    for (const toCell of toCells) {
-      const distance = Math.abs(fromCell.x - toCell.x) + Math.abs(fromCell.y - toCell.y);
-      if (distance < best.distance) best = { fromCell, toCell, distance };
-    }
-  }
-  return best;
+function pickPortAnchor(blueprint, nodeId, direction, portIndex = 0) {
+  const cells = cellsForNode(blueprint, nodeId);
+  if (cells.length === 0) return null;
+
+  const targetX = direction === 'output'
+    ? Math.max(...cells.map((cell) => cell.x))
+    : Math.min(...cells.map((cell) => cell.x));
+
+  const candidates = cells
+    .filter((cell) => cell.x === targetX)
+    .sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const selected = candidates[Math.abs(portIndex) % candidates.length] ?? candidates[0];
+  return selected ? { ...selected, direction } : null;
+}
+
+function distanceBetween(fromCell, toCell) {
+  if (!fromCell || !toCell) return null;
+  return Math.abs(fromCell.x - toCell.x) + Math.abs(fromCell.y - toCell.y);
 }
 
 function routeBetweenCells(fromCell, toCell) {
@@ -105,14 +114,19 @@ function addCongestion(summary, reports) {
 
 export function calculateConnectionMetrics(blueprint) {
   const summary = { reliability: 0, efficiency: 0, heat: 0, defectRisk: 0, cost: 0 };
+  const portAnchors = [];
   const reports = (blueprint.connections ?? []).map((connection) => {
-    const pair = bestCellPair(cellsForNode(blueprint, connection.from), cellsForNode(blueprint, connection.to));
-    const classification = classifyConnectionDistance(pair.distance);
+    const fromAnchor = pickPortAnchor(blueprint, connection.from, 'output', connection.fromPort ?? 0);
+    const toAnchor = pickPortAnchor(blueprint, connection.to, 'input', connection.toPort ?? 0);
+    const distance = distanceBetween(fromAnchor, toAnchor);
+    const classification = classifyConnectionDistance(distance);
     const modifier = modifiersForClass(classification);
-    const route = routeBetweenCells(pair.fromCell, pair.toCell);
+    const route = routeBetweenCells(fromAnchor, toAnchor);
+    if (fromAnchor) portAnchors.push({ ...fromAnchor, role: 'output', nodeId: connection.from });
+    if (toAnchor) portAnchors.push({ ...toAnchor, role: 'input', nodeId: connection.to });
     addModifier(summary, modifier);
-    return { ...connection, distance: pair.distance, classification, modifier, route, fromCell: pair.fromCell, toCell: pair.toCell };
+    return { ...connection, distance, classification, modifier, route, fromCell: fromAnchor, toCell: toAnchor, fromAnchor, toAnchor };
   });
   const congestion = addCongestion(summary, reports);
-  return { reports, summary, congestion };
+  return { reports, summary, congestion, portAnchors };
 }
