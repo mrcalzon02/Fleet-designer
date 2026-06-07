@@ -1,4 +1,5 @@
 import { progressResearchProjects } from './researchSimulation.js';
+import { processSupplyContracts, updateCommodityPrices } from './supplySimulation.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -406,14 +407,6 @@ function resolveContractDeadlines(next) {
   }
 }
 
-function restockSpotMarket(next) {
-  next.inventory.rawOre += 4;
-  next.inventory.volatiles += 2;
-  next.inventory.electronics += 2;
-  next.inventory.hullPlate += 3;
-  if (next.company.cycle % 3 === 0) next.inventory.driveCores += 1;
-}
-
 function allocateFactoryCapacity(next) {
   let capacity = next.company.factoryCapacity;
   let capacityUsed = 0;
@@ -451,14 +444,15 @@ export function advanceCycle(state) {
 
   const capacityUsed = allocateFactoryCapacity(next);
   progressResearchProjects(next);
+  processSupplyContracts(next);
+  updateCommodityPrices(next);
   resolveContractDeadlines(next);
-  restockSpotMarket(next);
 
   if (next.company.cash <= 0) {
     next.company.status = 'bankrupt';
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Bankruptcy triggered. Welcome to the intergalactic breadline.`);
   } else {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Burn paid, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, markets shifted.`);
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Burn paid, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply contracts processed.`);
   }
 
   next.eventLog = next.eventLog.slice(0, 18);
