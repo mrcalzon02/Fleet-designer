@@ -20,7 +20,7 @@ Status: implemented as first scaffold.
 
 ## Phase 1: Playable Management Loop
 
-Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, supplier procurement, refinery processing, and warehouse operations.
+Status: playable pass implemented with quantity production, partial stock handling, efficient factory allocation, queue controls, componentized cockpit panels, engineer-driven R&D, supplier procurement, refinery processing, warehouse operations, and first-pass component node technology data.
 
 Goal: player can advance cycles and make meaningful business decisions.
 
@@ -46,6 +46,9 @@ Implemented core work:
 - Commodity pricing: material spot prices move each cycle using simple volatility and trend rules.
 - Refinery recipes: raw inputs can be converted into higher-value production materials through paid refinery jobs.
 - Refinery capacity: refinery work advances through limited per-cycle processing capacity.
+- Component node library: seeded early crude nodes, late advanced nodes, stat modifiers, port counts, shapes, descriptions, and technology families.
+- Corporate technology seeds: player and NPC corporations now have defined starting node access profiles for future differentiation.
+- Node inspection UI: cockpit now shows component node descriptions, stat effects, shapes, ports, tech tree entries, and corporate seed profiles.
 - Defect handling: defective market lots receive reduced sale revenue; defective contract lots receive reduced contract payout.
 - IP market: list owned design rights and buy AI production licenses.
 - Operations log: visible consequences for every major action.
@@ -70,6 +73,8 @@ Recently fixed:
 - Added refinery recipes, refinery capacity, refinery job queuing, and refinery queue display.
 - Added `warehouseSimulation.js` to keep storage costs, aging, inspection, and scrapping out of the main simulation file.
 - Added warehouse inspection and scrapping controls to the finished-goods panel.
+- Added `nodeLibrary.js` with first-pass component nodes, technology tree entries, corporation seeds, and node stat summarization helpers.
+- Added `NodeTechnologyPanel` to expose node data, corporate tech seeds, and total chained stat effects in the cockpit.
 
 Known limitations to fix before calling Phase 1 complete:
 
@@ -78,6 +83,7 @@ Known limitations to fix before calling Phase 1 complete:
 - Procurement has spot prices, supplier contracts, and refinery conversion, but no supplier reputation, route risk, negotiated terms, or refinery upgrades yet.
 - Engineer hiring, firing, training, salary pressure, burnout events, and deep specialization are not implemented yet.
 - Warehouse capacity and storage costs exist, but there are not yet warehousing upgrades, cold storage, insurance, or stock reservation policies.
+- Component nodes are data-visible but not yet integrated into actual design construction, production stats, research unlocks, or spatial drag/drop editing.
 - The simulation file is now the next place to watch for growth; future mechanics should be split by domain when it becomes harder to read.
 
 Success condition: a player can go broke, recover, finish contracts, and generate revenue.
