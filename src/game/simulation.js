@@ -1,3 +1,4 @@
+import { replenishOpenContracts } from './contractContent.js';
 import { calculateDefectRisk, calculateOperatingBurn, calculateProductionCashCost } from './difficultyEffects.js';
 import { progressResearchProjects } from './researchSimulation.js';
 import { advanceRivalCompanies } from './rivalSimulation.js';
@@ -516,13 +517,14 @@ export function advanceCycle(state) {
   processWarehouseAging(next);
   updateCommodityPrices(next);
   advanceRivalCompanies(next);
+  replenishOpenContracts(next);
   resolveContractDeadlines(next);
 
   if (next.company.cash <= 0) {
     next.company.status = 'bankrupt';
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Bankruptcy triggered. Welcome to the intergalactic breadline.`);
   } else {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Operating burn ${currency(operatingBurn)}, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply, warehouse, and rival watch processed.`);
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Operating burn ${currency(operatingBurn)}, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply, warehouse, rival watch, and contract sourcing processed.`);
   }
 
   next.eventLog = next.eventLog.slice(0, 18);
