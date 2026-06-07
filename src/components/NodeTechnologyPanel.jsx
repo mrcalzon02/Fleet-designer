@@ -11,6 +11,23 @@ function formatBill(bill) {
   return Object.entries(bill ?? {}).map(([key, value]) => `${key} ${value}`).join(' // ');
 }
 
+function TemplateGrid({ template }) {
+  if (!template) return null;
+  return (
+    <div className="template-grid" aria-label={`${template.name} grid`}>
+      {template.grid.map((row, rowIndex) => (
+        <div className="template-row" key={`${template.id}-${rowIndex}`}>
+          {[...row].map((cell, cellIndex) => (
+            <span className={`template-cell ${cell === 'X' ? 'allowed' : 'blocked'}`} key={`${rowIndex}-${cellIndex}`}>
+              {cell === 'X' ? '■' : '·'}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NodeCard({ node, unlocked }) {
   return (
     <div className={`data-card ${unlocked ? 'complete' : 'paused'}`}>
@@ -40,11 +57,14 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
   const design = calculateBlueprintDesign(blueprint);
   const availability = blueprintAvailability(game, blueprint);
   const footprint = availability.layout.footprint;
+  const template = availability.layout.template;
   return (
     <div className={`data-card ${availability.available ? 'active' : 'paused'}`}>
       <strong>{blueprint.name}</strong>
       <small>{blueprint.type} // {blueprint.nodeIds.length} nodes // {availability.available ? 'available' : 'blocked'}</small>
       <p>{blueprint.description}</p>
+      {template && <p>Template: {template.name}. {template.description}</p>}
+      <TemplateGrid template={template} />
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
       <p>Bill: {formatBill(design.bill)}.</p>
       <p>Chain effects: {formatStats(design.chainStats)}</p>
