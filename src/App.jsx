@@ -94,7 +94,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <CompanyHeader company={game.company} activeWorkUnits={activeWorkUnits} warehouseUsed={warehouseUsed} onAdvanceCycle={handleAdvanceCycle} />
+      <CompanyHeader company={game.company} activeWorkUnits={activeWorkUnits} warehouseUsed={warehouseUsed} onAdvanceCycle={handleAdvanceCycle} game={game} />
 
       <FinancialOverview
         cashHistory={cashHistory}
