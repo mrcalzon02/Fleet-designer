@@ -8,9 +8,11 @@ import { InventoryWarehousePanels } from './components/InventoryWarehousePanels.
 import { NodeTechnologyPanel } from './components/NodeTechnologyPanel.jsx';
 import { OperationsPanels } from './components/OperationsPanels.jsx';
 import { ProductionPanels } from './components/ProductionPanels.jsx';
+import { StaffMarketPanel } from './components/StaffMarketPanel.jsx';
 import { VehicleAssemblyPanel } from './components/VehicleAssemblyPanel.jsx';
 import { createDesignFromBlueprint } from './game/designSimulation.js';
 import { initialGameState } from './game/initialState.js';
+import { hireApplicant, processStaffMarket, recruitFromRival, releaseEngineer } from './game/laborMarketSimulation.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
 import { setCompanyDifficulty } from './game/setupSimulation.js';
 import { buySpotMaterial, defaultRefineryRecipes, queueRefineryJob, toggleSupplyContract } from './game/supplySimulation.js';
@@ -60,6 +62,7 @@ function App() {
   function handleAdvanceCycle() {
     setGame((current) => {
       const next = advanceCycle(current);
+      processStaffMarket(next);
       setCashHistory((history) => [
         ...history,
         { cycle: `C${next.company.cycle}`, cash: Math.max(0, next.company.cash) / 1000000 },
@@ -110,6 +113,13 @@ function App() {
       <CampaignPressurePanel
         game={game}
         onSetDifficulty={(difficultyId) => applyAction((state) => setCompanyDifficulty(state, difficultyId))}
+      />
+
+      <StaffMarketPanel
+        game={game}
+        onHireApplicant={(candidateId) => applyAction((state) => hireApplicant(state, candidateId))}
+        onReleaseEngineer={(engineerId) => applyAction((state) => releaseEngineer(state, engineerId))}
+        onRecruitFromRival={(rivalId, staffId) => applyAction((state) => recruitFromRival(state, rivalId, staffId))}
       />
 
       <section className="three-column">
