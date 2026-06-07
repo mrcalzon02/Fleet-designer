@@ -1,5 +1,32 @@
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+export const defaultRefineryRecipes = [
+  {
+    id: 'refine-hull-plate',
+    name: 'Smelt Hull Plate',
+    input: { rawOre: 2 },
+    output: { hullPlate: 1 },
+    cashCost: 25000,
+    workRequired: 2,
+  },
+  {
+    id: 'reclaim-electronics',
+    name: 'Reclaim Electronics',
+    input: { rawOre: 1, volatiles: 1 },
+    output: { electronics: 1 },
+    cashCost: 42000,
+    workRequired: 3,
+  },
+  {
+    id: 'calibrate-drive-core',
+    name: 'Calibrate Drive Core',
+    input: { electronics: 3, volatiles: 1 },
+    output: { driveCores: 1 },
+    cashCost: 180000,
+    workRequired: 5,
+  },
+];
+
 function normalizeQuantity(value, fallback = 1) {
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) return fallback;
@@ -8,6 +35,30 @@ function normalizeQuantity(value, fallback = 1) {
 
 function materialLabel(state, material) {
   return state.commodities?.[material]?.label ?? material;
+}
+
+function formatCredits(amount) {
+  return `CR ${Math.round(amount).toLocaleString('en-US')}`;
+}
+
+function recipes(state) {
+  return state.refineryRecipes ?? defaultRefineryRecipes;
+}
+
+function hasMaterials(inventory, bill, quantity) {
+  return Object.entries(bill).every(([material, amount]) => (inventory[material] ?? 0) >= amount * quantity);
+}
+
+function spendMaterials(inventory, bill, quantity) {
+  for (const [material, amount] of Object.entries(bill)) {
+    inventory[material] = (inventory[material] ?? 0) - amount * quantity;
+  }
+}
+
+function addMaterials(inventory, bill, quantity) {
+  for (const [material, amount] of Object.entries(bill)) {
+    inventory[material] = (inventory[material] ?? 0) + amount * quantity;
+  }
 }
 
 export function buySpotMaterial(state, material, quantity = 1) {
@@ -24,7 +75,7 @@ export function buySpotMaterial(state, material, quantity = 1) {
 
   next.company.cash -= cost;
   next.inventory[material] = (next.inventory[material] ?? 0) + purchaseQuantity;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Bought ${purchaseQuantity} x ${materialLabel(next, material)} on the spot market for CR ${cost.toLocaleString('en-US')}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Bought ${purchaseQuantity} x ${materialLabel(next, material)} on the spot market for ${formatCredits(cost)}.`);
   return next;
 }
 
@@ -37,6 +88,64 @@ export function toggleSupplyContract(state, contractId) {
   contract.remainingCycles = contract.active ? contract.lockedCycles : 0;
   next.eventLog.unshift(`Cycle ${next.company.cycle}: ${contract.active ? 'Activated' : 'Suspended'} supply contract with ${contract.supplier}.`);
   return next;
+}
+
+export function queueRefineryJob(state, recipeId, quantity = 1) {
+  const next = clone(state);
+  const recipe = recipes(next).find((item) => item.id === recipeId);
+  const jobQuantity = normalizeQuantity(quantity);
+  if (!recipe) return next;
+
+  const totalCost = recipe.cashCost * jobQuantity;
+  if (next.company.cash < totalCost) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Refinery job blocked. Insufficient capital for ${recipe.name}.`);
+    return next;
+  }
+
+  if (!hasMaterials(next.inventory, recipe.input, jobQuantity)) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Refinery job blocked. Missing input materials for ${recipe.name}.`);
+    return next;
+  }
+
+  spendMaterials(next.inventory, recipe.input, jobQuantity);
+  next.company.cash -= totalCost;
+  next.refineryJobs = next.refineryJobs ?? [];
+  next.refineryJobs.push({
+    id: `refjob-${Date.now()}-${Math.round(Math.random() * 10000)}`,
+    recipeId: recipe.id,
+    recipeName: recipe.name,
+    quantity: jobQuantity,
+    progress: 0,
+    required: recipe.workRequired * jobQuantity,
+    input: { ...recipe.input },
+    output: { ...recipe.output },
+    cashCost: recipe.cashCost,
+    status: 'queued',
+  });
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued refinery job ${recipe.name} x ${jobQuantity}.`);
+  return next;
+}
+
+function processRefineryJobs(next) {
+  let capacity = next.company.refineryCapacity ?? 4;
+  next.refineryJobs = next.refineryJobs ?? [];
+
+  for (const job of next.refineryJobs.filter((item) => ['queued', 'active'].includes(item.status))) {
+    if (capacity <= 0) break;
+    job.status = 'active';
+    const remaining = Math.max(0, job.required - job.progress);
+    const applied = Math.min(remaining, capacity);
+    job.progress += applied;
+    capacity -= applied;
+
+    if (job.progress >= job.required) {
+      job.progress = job.required;
+      job.status = 'complete';
+      job.completedCycle = next.company.cycle;
+      addMaterials(next.inventory, job.output, job.quantity);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: Refinery completed ${job.recipeName} x ${job.quantity}.`);
+    }
+  }
 }
 
 export function processSupplyContracts(next) {
@@ -67,6 +176,8 @@ export function processSupplyContracts(next) {
       next.eventLog.unshift(`Cycle ${next.company.cycle}: Supply contract with ${contract.supplier} expired.`);
     }
   }
+
+  processRefineryJobs(next);
 }
 
 export function updateCommodityPrices(next) {
