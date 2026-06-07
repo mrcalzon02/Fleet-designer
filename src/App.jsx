@@ -7,6 +7,7 @@ import { InventoryWarehousePanels } from './components/InventoryWarehousePanels.
 import { NodeTechnologyPanel } from './components/NodeTechnologyPanel.jsx';
 import { OperationsPanels } from './components/OperationsPanels.jsx';
 import { ProductionPanels } from './components/ProductionPanels.jsx';
+import { createDesignFromBlueprint } from './game/designSimulation.js';
 import { initialGameState } from './game/initialState.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
 import { buySpotMaterial, defaultRefineryRecipes, queueRefineryJob, toggleSupplyContract } from './game/supplySimulation.js';
@@ -162,7 +163,7 @@ function App() {
         onUnassignEngineer={(engineerId) => applyAction((state) => unassignEngineer(state, engineerId))}
       />
 
-      <NodeTechnologyPanel />
+      <NodeTechnologyPanel onCreateDesign={(blueprintId) => applyAction((state) => createDesignFromBlueprint(state, blueprintId))} />
 
       <AssetPreview />
     </main>
