@@ -12,6 +12,7 @@ import { createDesignFromBlueprint } from './game/designSimulation.js';
 import { initialGameState } from './game/initialState.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
 import { buySpotMaterial, defaultRefineryRecipes, queueRefineryJob, toggleSupplyContract } from './game/supplySimulation.js';
+import { createVehicleDesignFromAssembly } from './game/vehicleDesignSimulation.js';
 import { inspectFinishedGood, scrapFinishedGood } from './game/warehouseSimulation.js';
 import {
   acceptContract,
@@ -130,7 +131,10 @@ function App() {
         />
       </section>
 
-      <VehicleAssemblyPanel game={game} />
+      <VehicleAssemblyPanel
+        game={game}
+        onSaveVehicleDesign={(templateId, assignments) => applyAction((state) => createVehicleDesignFromAssembly(state, templateId, assignments))}
+      />
 
       <InventoryWarehousePanels
         inventory={game.inventory}
