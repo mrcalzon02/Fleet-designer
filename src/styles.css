@@ -280,6 +280,39 @@ h1 {
 .data-card.delivered { border-color: rgba(0, 255, 209, 0.65); }
 .data-card.failed { border-color: rgba(255, 59, 59, 0.75); }
 
+.template-grid {
+  display: inline-grid;
+  gap: 2px;
+  align-self: start;
+  width: max-content;
+  border: 1px solid rgba(255, 184, 0, 0.28);
+  background: rgba(5, 7, 10, 0.86);
+  padding: 8px;
+  font-family: 'Roboto Mono', 'Cascadia Code', monospace;
+}
+.template-row {
+  display: flex;
+  gap: 2px;
+}
+.template-cell {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  line-height: 1;
+  border: 1px solid rgba(122, 145, 153, 0.22);
+}
+.template-cell.allowed {
+  color: #00ffd1;
+  background: rgba(0, 255, 209, 0.14);
+  border-color: rgba(0, 255, 209, 0.42);
+}
+.template-cell.blocked {
+  color: rgba(122, 145, 153, 0.5);
+  background: rgba(122, 145, 153, 0.04);
+}
+
 .event-log {
   display: grid;
   gap: 8px;
