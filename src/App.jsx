@@ -12,6 +12,7 @@ import { VehicleAssemblyPanel } from './components/VehicleAssemblyPanel.jsx';
 import { createDesignFromBlueprint } from './game/designSimulation.js';
 import { initialGameState } from './game/initialState.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
+import { setCompanyDifficulty } from './game/setupSimulation.js';
 import { buySpotMaterial, defaultRefineryRecipes, queueRefineryJob, toggleSupplyContract } from './game/supplySimulation.js';
 import { createVehicleDesignFromAssembly } from './game/vehicleDesignSimulation.js';
 import { inspectFinishedGood, scrapFinishedGood } from './game/warehouseSimulation.js';
@@ -106,7 +107,10 @@ function App() {
         cycle={game.company.cycle}
       />
 
-      <CampaignPressurePanel />
+      <CampaignPressurePanel
+        game={game}
+        onSetDifficulty={(difficultyId) => applyAction((state) => setCompanyDifficulty(state, difficultyId))}
+      />
 
       <section className="three-column">
         <ContractBoard
