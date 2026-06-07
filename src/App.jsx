@@ -9,6 +9,7 @@ import { ProductionPanels } from './components/ProductionPanels.jsx';
 import { initialGameState } from './game/initialState.js';
 import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
 import { buySpotMaterial, defaultRefineryRecipes, queueRefineryJob, toggleSupplyContract } from './game/supplySimulation.js';
+import { inspectFinishedGood, scrapFinishedGood } from './game/warehouseSimulation.js';
 import {
   acceptContract,
   advanceCycle,
@@ -143,6 +144,8 @@ function App() {
         onBuySpotMaterial={(material, quantity) => applyAction((state) => buySpotMaterial(state, material, quantity))}
         onToggleSupplyContract={(contractId) => applyAction((state) => toggleSupplyContract(state, contractId))}
         onQueueRefineryJob={(recipeId, quantity) => applyAction((state) => queueRefineryJob(state, recipeId, quantity))}
+        onInspectFinishedGood={(lotId) => applyAction((state) => inspectFinishedGood(state, lotId))}
+        onScrapFinishedGood={(lotId) => applyAction((state) => scrapFinishedGood(state, lotId))}
         onSellFinishedGood={(lotId, quantity) => applyAction((state) => sellFinishedGood(state, lotId, quantity))}
         onDeliverContractStock={(contractId, quantity) => applyAction((state) => deliverContractStock(state, contractId, quantity))}
       />
