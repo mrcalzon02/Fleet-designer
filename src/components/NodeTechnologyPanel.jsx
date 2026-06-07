@@ -1,4 +1,4 @@
-import { calculateBlueprintDesign, prototypeBlueprints } from '../game/designSimulation.js';
+import { blueprintAvailability, calculateBlueprintDesign, prototypeBlueprints } from '../game/designSimulation.js';
 import { componentNodeLibrary, corporationTechnologySeeds, nodesForCorporation, summarizeNodeStats, technologyTree } from '../game/nodeLibrary.js';
 
 function formatStats(stats) {
@@ -11,11 +11,11 @@ function formatBill(bill) {
   return Object.entries(bill ?? {}).map(([key, value]) => `${key} ${value}`).join(' // ');
 }
 
-function NodeCard({ node }) {
+function NodeCard({ node, unlocked }) {
   return (
-    <div className="data-card">
+    <div className={`data-card ${unlocked ? 'complete' : 'paused'}`}>
       <strong>{node.name}</strong>
-      <small>{node.family} // tier {node.tier} // {node.researchLevel}</small>
+      <small>{node.family} // tier {node.tier} // {unlocked ? 'unlocked' : 'locked'}</small>
       <p>{node.description}</p>
       <p>Stats: {formatStats(node.stats)}</p>
       <p>Ports: {node.ports.inputs} in / {node.ports.outputs} out. Shape: {node.shape.join(' / ')}.</p>
@@ -36,22 +36,27 @@ function CorporationCard({ corporation }) {
   );
 }
 
-function BlueprintCard({ blueprint, onCreateDesign }) {
+function BlueprintCard({ blueprint, game, onCreateDesign }) {
   const design = calculateBlueprintDesign(blueprint);
+  const availability = blueprintAvailability(game, blueprint);
   return (
-    <div className="data-card active">
+    <div className={`data-card ${availability.available ? 'active' : 'paused'}`}>
       <strong>{blueprint.name}</strong>
-      <small>{blueprint.type} // {blueprint.nodeIds.length} nodes</small>
+      <small>{blueprint.type} // {blueprint.nodeIds.length} nodes // {availability.available ? 'available' : 'locked'}</small>
       <p>{blueprint.description}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
       <p>Bill: {formatBill(design.bill)}.</p>
       <p>Chain effects: {formatStats(design.chainStats)}</p>
-      <button onClick={() => onCreateDesign(blueprint.id)}>Create Prototype Design</button>
+      {!availability.available && <p>Missing nodes: {availability.missingNodes.map((node) => node.name).join(', ')}.</p>}
+      <button onClick={() => onCreateDesign(blueprint.id)} disabled={!availability.available}>Create Prototype Design</button>
     </div>
   );
 }
 
-export function NodeTechnologyPanel({ onCreateDesign }) {
+export function NodeTechnologyPanel({ game, onCreateDesign }) {
+  const unlockedNodeIds = new Set(game.company.unlockedNodeIds ?? []);
+  const unlockedTechIds = new Set(game.company.unlockedTechIds ?? []);
+
   return (
     <>
       <section className="two-column">
@@ -62,7 +67,7 @@ export function NodeTechnologyPanel({ onCreateDesign }) {
           </div>
           <div className="stack-list">
             {prototypeBlueprints.map((blueprint) => (
-              <BlueprintCard blueprint={blueprint} key={blueprint.id} onCreateDesign={onCreateDesign} />
+              <BlueprintCard blueprint={blueprint} game={game} key={blueprint.id} onCreateDesign={onCreateDesign} />
             ))}
           </div>
         </article>
@@ -70,10 +75,10 @@ export function NodeTechnologyPanel({ onCreateDesign }) {
         <article className="console-panel">
           <div className="panel-heading">
             <span>Component Node Library</span>
-            <small>{componentNodeLibrary.length} seeded nodes</small>
+            <small>{unlockedNodeIds.size}/{componentNodeLibrary.length} unlocked</small>
           </div>
           <div className="stack-list">
-            {componentNodeLibrary.map((node) => <NodeCard node={node} key={node.id} />)}
+            {componentNodeLibrary.map((node) => <NodeCard node={node} unlocked={unlockedNodeIds.has(node.id)} key={node.id} />)}
           </div>
         </article>
       </section>
@@ -94,13 +99,13 @@ export function NodeTechnologyPanel({ onCreateDesign }) {
         <article className="console-panel">
           <div className="panel-heading">
             <span>Technology Tree</span>
-            <small>node unlock paths</small>
+            <small>{unlockedTechIds.size}/{technologyTree.length} unlocked</small>
           </div>
           <div className="stack-list">
             {technologyTree.map((tech) => (
-              <div className="data-card" key={tech.id}>
+              <div className={`data-card ${unlockedTechIds.has(tech.id) ? 'complete' : ''}`} key={tech.id}>
                 <strong>{tech.name}</strong>
-                <small>{tech.family} // tier {tech.tier}</small>
+                <small>{tech.family} // tier {tech.tier} // {unlockedTechIds.has(tech.id) ? 'unlocked' : 'locked'}</small>
                 <p>{tech.description}</p>
                 <p>Unlocks: {tech.unlocks.join(', ')}.</p>
                 {tech.prerequisites && <p>Prerequisites: {tech.prerequisites.join(', ')}.</p>}
