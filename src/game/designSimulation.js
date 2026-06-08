@@ -1,4 +1,5 @@
 import { calculateConnectionMetrics } from './connectionMetrics.js';
+import { evaluateComponentLinkEffects } from './componentLinkEffects.js';
 import { validateBlueprintLayout } from './layoutValidation.js';
 import { componentNodeLibrary, summarizeNodeStats } from './nodeLibrary.js';
 
@@ -34,11 +35,8 @@ export const prototypeBlueprints = [
       { nodeId: 'node-basic-capacitor-bank', x: 2, y: 1, facing: 'east' },
       { nodeId: 'node-redundant-control-core', x: 2, y: 2, facing: 'east' },
     ],
-    connections: [
-      { from: 'node-riveted-frame-joint', fromPort: 'frame-out-b', to: 'node-basic-capacitor-bank', toPort: 'charge-in' },
-      { from: 'node-basic-capacitor-bank', fromPort: 'buffer-out-a', to: 'node-redundant-control-core', toPort: 'logic-in-a' },
-    ],
-    description: 'A mid-grade module chain that stabilizes structure and automation enough to support practical cargo work.',
+    connections: [],
+    description: 'A module-level aggregate package. Placement and node choice affect the module, but module grids do not have linking mechanics.',
     baseBill: { rawOre: 3, electronics: 3, hullPlate: 4 },
   },
   {
@@ -52,11 +50,8 @@ export const prototypeBlueprints = [
       { nodeId: 'node-microchannel-cooler', x: 2, y: 2, facing: 'east' },
       { nodeId: 'node-basic-capacitor-bank', x: 0, y: 3, facing: 'east' },
     ],
-    connections: [
-      { from: 'node-basic-capacitor-bank', fromPort: 'buffer-out-a', to: 'node-vector-plasma-drive', toPort: 'plasma-in-b' },
-      { from: 'node-vector-plasma-drive', fromPort: 'vector-out', to: 'node-microchannel-cooler', toPort: 'coolant-in-a' },
-    ],
-    description: 'A compact high-thrust propulsion chain with serious power and heat demands. Fast, expensive, and hungry.',
+    connections: [],
+    description: 'A compact high-thrust aggregate module with serious power and heat demands. Module grids do not link nodes.',
     baseBill: { volatiles: 3, electronics: 5, hullPlate: 3, driveCores: 1 },
   },
   {
@@ -71,12 +66,8 @@ export const prototypeBlueprints = [
       { nodeId: 'node-redundant-control-core', x: 3, y: 3, facing: 'east' },
       { nodeId: 'node-microchannel-cooler', x: 4, y: 4, facing: 'north' },
     ],
-    connections: [
-      { from: 'node-compact-reactor-spine', fromPort: 'spine-out-a', to: 'node-redundant-control-core', toPort: 'logic-in-a' },
-      { from: 'node-lattice-frame-joint', fromPort: 'lattice-out-d', to: 'node-redundant-control-core', toPort: 'logic-in-b' },
-      { from: 'node-redundant-control-core', fromPort: 'logic-out-c', to: 'node-microchannel-cooler', toPort: 'coolant-in-a' },
-    ],
-    description: 'A late starter vessel chain built around compact power, better thermal control, and lighter structure.',
+    connections: [],
+    description: 'A vessel-level aggregate hull concept. Vessel grids collect category/stat effects through valid slots, not link chains.',
     baseBill: { rawOre: 8, volatiles: 3, electronics: 7, hullPlate: 8, driveCores: 2 },
   },
 ];
@@ -94,8 +85,8 @@ function sumNodeTier(nodes) {
   return nodes.reduce((sum, node) => sum + (node.tier ?? 0), 0);
 }
 
-function mergedStats(baseStats, connectionSummary) {
-  return { ...baseStats, layout: connectionSummary };
+function mergedStats(baseStats, linkSummary) {
+  return { ...baseStats, layout: linkSummary };
 }
 
 function billWithNodePressure(baseBill, stats, type) {
@@ -109,6 +100,39 @@ function billWithNodePressure(baseBill, stats, type) {
   if (volatilePressure) bill.volatiles = (bill.volatiles ?? 0) + volatilePressure;
   if (type === 'vessel' && (stats.powerOutput ?? 0) > 50) bill.driveCores = (bill.driveCores ?? 0) + 1;
   return bill;
+}
+
+function blankLinkMetrics(note) {
+  return {
+    reports: [],
+    summary: { reliability: 0, efficiency: 0, heat: 0, defectRisk: 0, cost: 0 },
+    congestion: { endpointUse: [], congestedEndpoints: [], congestionPenalty: 0 },
+    portAnchors: [],
+    issues: [],
+    note,
+  };
+}
+
+function linkModelForBlueprint(blueprint, nodes) {
+  if (blueprint.type !== 'component') {
+    return {
+      connectionMetrics: blankLinkMetrics('Module and vehicle grids do not use node linking mechanics.'),
+      componentLinkEffects: {
+        summary: { reliability: 0, efficiency: 0, heat: 0, defectRisk: 0, cost: 0 },
+        linkReports: [],
+        note: 'Bypassed because this blueprint is not a component.',
+      },
+      linkSummary: { reliability: 0, efficiency: 0, heat: 0, defectRisk: 0, cost: 0 },
+    };
+  }
+
+  const connectionMetrics = calculateConnectionMetrics(blueprint);
+  const componentLinkEffects = evaluateComponentLinkEffects(blueprint, connectionMetrics.reports, nodes);
+  const linkSummary = { ...connectionMetrics.summary };
+  for (const [key, value] of Object.entries(componentLinkEffects.summary ?? {})) {
+    linkSummary[key] = (linkSummary[key] ?? 0) + value;
+  }
+  return { connectionMetrics, componentLinkEffects, linkSummary };
 }
 
 export function blueprintAvailability(state, blueprint) {
@@ -129,28 +153,28 @@ export function blueprintAvailability(state, blueprint) {
 export function calculateBlueprintDesign(blueprint) {
   const nodes = nodesForBlueprint(blueprint);
   const nodeStats = summarizeNodeStats(nodes);
-  const connectionMetrics = calculateConnectionMetrics(blueprint);
-  const stats = mergedStats(nodeStats, connectionMetrics.summary);
+  const { connectionMetrics, componentLinkEffects, linkSummary } = linkModelForBlueprint(blueprint, nodes);
+  const stats = mergedStats(nodeStats, linkSummary);
   const tierWeight = sumNodeTier(nodes);
   const layout = validateBlueprintLayout(blueprint);
   const typeBaseCost = blueprint.type === 'vessel' ? 1250000 : blueprint.type === 'module' ? 460000 : 190000;
   const typeBaseSale = blueprint.type === 'vessel' ? 2300000 : blueprint.type === 'module' ? 820000 : 360000;
 
   const positivePerformance = (nodeStats.efficiency ?? 0)
-    + (connectionMetrics.summary.efficiency ?? 0) * 1.5
+    + (linkSummary.efficiency ?? 0) * 1.5
     + (nodeStats.automation ?? 0)
     + (nodeStats.durability ?? 0) * 0.45
     + (nodeStats.thrust ?? 0) * 0.35
     + (nodeStats.powerOutput ?? 0) * 0.28
     + (nodeStats.powerStability ?? 0) * 0.6;
   const riskLoad = (nodeStats.defectRisk ?? 0)
-    + (connectionMetrics.summary.defectRisk ?? 0)
-    + Math.max(0, (nodeStats.heat ?? 0) + (connectionMetrics.summary.heat ?? 0)) * 0.35
+    + (linkSummary.defectRisk ?? 0)
+    + Math.max(0, (nodeStats.heat ?? 0) + (linkSummary.heat ?? 0)) * 0.35
     + (nodeStats.maintenance ?? 0) * 0.3;
 
   const quality = clamp(Math.round(38 + tierWeight * 4 + positivePerformance * 0.18 - riskLoad * 0.08), 5, 98);
-  const reliability = clamp(Math.round(42 + (nodeStats.reliability ?? 0) + (connectionMetrics.summary.reliability ?? 0) + (nodeStats.powerStability ?? 0) * 0.35 - (nodeStats.defectRisk ?? 0) * 0.6 - Math.max(0, nodeStats.heat ?? 0) * 0.18 - (nodeStats.maintenance ?? 0) * 0.25), 4, 96);
-  const costMultiplier = clamp(1 + ((nodeStats.cost ?? 0) + (connectionMetrics.summary.cost ?? 0) + tierWeight * 6 + Math.max(0, nodeStats.mass ?? 0) * 0.25) / 100, 0.55, 2.6);
+  const reliability = clamp(Math.round(42 + (nodeStats.reliability ?? 0) + (linkSummary.reliability ?? 0) + (nodeStats.powerStability ?? 0) * 0.35 - (nodeStats.defectRisk ?? 0) * 0.6 - Math.max(0, nodeStats.heat ?? 0) * 0.18 - (nodeStats.maintenance ?? 0) * 0.25), 4, 96);
+  const costMultiplier = clamp(1 + ((nodeStats.cost ?? 0) + (linkSummary.cost ?? 0) + tierWeight * 6 + Math.max(0, nodeStats.mass ?? 0) * 0.25) / 100, 0.55, 2.6);
   const saleMultiplier = clamp(1 + (quality - 50) / 110 + tierWeight / 35, 0.5, 2.8);
 
   return {
@@ -164,13 +188,14 @@ export function calculateBlueprintDesign(blueprint) {
     bill: billWithNodePressure(blueprint.baseBill, stats, blueprint.type),
     chainStats: stats,
     connectionMetrics,
+    componentLinkEffects,
     layoutFootprint: layout.footprint,
     layoutTemplateId: blueprint.layoutTemplateId,
     placements: blueprint.placements ?? [],
-    connections: blueprint.connections ?? [],
+    connections: blueprint.type === 'component' ? blueprint.connections ?? [] : [],
     nodeIds: blueprint.nodeIds,
     description: blueprint.description,
-    defectRiskModifier: Math.round((nodeStats.defectRisk ?? 0) + (connectionMetrics.summary.defectRisk ?? 0) - ((nodeStats.reliability ?? 0) + (connectionMetrics.summary.reliability ?? 0)) * 0.15 + Math.max(0, (nodeStats.maintenance ?? 0)) * 0.12),
+    defectRiskModifier: Math.round((nodeStats.defectRisk ?? 0) + (linkSummary.defectRisk ?? 0) - ((nodeStats.reliability ?? 0) + (linkSummary.reliability ?? 0)) * 0.15 + Math.max(0, (nodeStats.maintenance ?? 0)) * 0.12),
   };
 }
 
