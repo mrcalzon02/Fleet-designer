@@ -36,7 +36,7 @@ if errorlevel 1 (
 
 echo.
 echo Diagnostics and Electron runtime passed. Building and launching desktop shell...
-call npm run desktop
+call npm run desktop:launch
 if errorlevel 1 goto fail
 
 exit /b 0
