@@ -38,7 +38,7 @@ export function ProductionPanels({ designs, productionRuns, getProductionQuantit
       <article className="console-panel tall-panel">
         <div className="panel-heading">
           <span>Production Queue</span>
-          <small>factory management</small>
+          <small>factory management and engineering coverage</small>
         </div>
         <div className="stack-list">
           {productionRuns.length === 0 && <p>No production runs queued.</p>}
@@ -47,7 +47,8 @@ export function ProductionPanels({ designs, productionRuns, getProductionQuantit
               <strong>{run.designName}</strong>
               <small>{run.quantity} units // {run.purpose} // {run.revenueMode} // priority {run.priority ?? 'normal'}</small>
               <progress max={run.required} value={run.progress} />
-              <p>Progress {run.progress}/{run.required}. Defect risk {run.defectRisk}%. Status: {run.status}. QA: {run.qaResult ?? 'pending'}.</p>
+              <p>Progress {run.progress}/{run.required}. Defect risk {run.defectRisk}%{run.baseDefectRisk ? ` from base ${run.baseDefectRisk}%` : ''}. Status: {run.status}. QA: {run.qaResult ?? 'pending'}.</p>
+              <p>Engineering coverage: {run.engineeringCoverageLabel ?? 'not yet in production'}{run.engineeringCoverageRatio !== undefined ? ` // ratio ${run.engineeringCoverageRatio}:1` : ''}.</p>
               {run.stockLotId && <p>Stock lot: {run.stockLotId}</p>}
               {!['complete', 'canceled'].includes(run.status) && (
                 <div className="button-row segmented-actions">
