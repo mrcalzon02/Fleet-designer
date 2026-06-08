@@ -1,4 +1,5 @@
 import { difficultyMultiplier } from './difficultyEffects.js';
+import { ensureStaffGrowthFields } from './staffGrowth.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -41,6 +42,23 @@ function signingBonus(candidate) {
   return Math.round((candidate.salary ?? 80000) * (candidate.skill >= 4 ? 1.8 : candidate.skill >= 3 ? 1.25 : 0.75));
 }
 
+function staffGrowthSeed(seniority) {
+  if (seniority === 'principal') return 220;
+  if (seniority === 'senior') return 90;
+  if (seniority === 'associate') return 30;
+  return 0;
+}
+
+function withGrowthFields(staff) {
+  const nextStaff = { ...staff };
+  nextStaff.experience = nextStaff.experience ?? staffGrowthSeed(nextStaff.seniority);
+  nextStaff.completedProjects = nextStaff.completedProjects ?? 0;
+  nextStaff.specialtyExperience = nextStaff.specialtyExperience ?? { [nextStaff.specialty]: Math.round((nextStaff.experience ?? 0) * 0.6) };
+  nextStaff.promotionHistory = nextStaff.promotionHistory ?? [];
+  ensureStaffGrowthFields(nextStaff);
+  return nextStaff;
+}
+
 function generateApplicant(state, offset = 0) {
   const cycle = state.company?.cycle ?? 1;
   const seed = cycle * 41 + (state.company?.reputation ?? 0) * 7 + offset * 19;
@@ -49,7 +67,7 @@ function generateApplicant(state, offset = 0) {
   const skill = skillForSeniority(seniority);
   const salary = salaryForCandidate(state, specialty, skill);
   const name = staffNames[pickIndex(seed + 11, staffNames.length)];
-  return {
+  return withGrowthFields({
     id: `app-${cycle}-${offset}-${name.toLowerCase().replace(/\s+/g, '-')}`,
     name,
     specialty,
@@ -62,7 +80,7 @@ function generateApplicant(state, offset = 0) {
     postedCycle: cycle,
     expiresCycle: cycle + 3 + pickIndex(seed, 3),
     profile: `${seniority} ${specialty} operator seeking a stable industrial yard and credible project pipeline.`,
-  };
+  });
 }
 
 function generateRivalStaffMember(rival, index = 0) {
@@ -73,7 +91,7 @@ function generateRivalStaffMember(rival, index = 0) {
   const skill = Math.min(5, skillForSeniority(seniority) + ((rival.techLevel ?? 1) >= 5 ? 1 : 0));
   const salary = Math.round((64000 + skill * 32000) * (1 + (rival.marketShare ?? 4) / 120));
   const loyalty = Math.max(25, Math.min(95, 52 + pickIndex(seed + 9, 38) + Math.round((rival.marketShare ?? 4) / 2)));
-  return {
+  return withGrowthFields({
     id: `rst-${rival.id}-${index}`,
     name: staffNames[pickIndex(seed + 7, staffNames.length)],
     specialty,
@@ -85,7 +103,7 @@ function generateRivalStaffMember(rival, index = 0) {
     loyalty,
     visible: true,
     profile: `${seniority} ${specialty} specialist employed by ${rival.name}. Loyalty ${loyalty}; counteroffer cost rises with loyalty and rival market share.`,
-  };
+  });
 }
 
 function ensureStaffMarket(next) {
@@ -123,7 +141,7 @@ function rivalRecruitApplicant(next) {
   const candidate = applicants[0];
   const rival = rivals[Math.abs((next.company?.cycle ?? 1) + candidate.id.length) % rivals.length];
   rival.staff = rival.staff ?? [];
-  rival.staff.push({
+  rival.staff.push(withGrowthFields({
     id: `rst-${rival.id}-market-${candidate.id}`,
     name: candidate.name,
     specialty: candidate.specialty,
@@ -133,9 +151,13 @@ function rivalRecruitApplicant(next) {
     morale: candidate.morale,
     fatigue: candidate.fatigue,
     loyalty: 58,
+    experience: candidate.experience,
+    completedProjects: candidate.completedProjects,
+    specialtyExperience: candidate.specialtyExperience,
+    promotionHistory: candidate.promotionHistory,
     visible: true,
     profile: `${candidate.name} joined ${rival.name} from the open staff market.`,
-  });
+  }));
   next.staffMarket.applicants = applicants.filter((item) => item.id !== candidate.id);
   rival.lastAction = `Recruited staff candidate ${candidate.name}.`;
   next.eventLog.unshift(`Cycle ${next.company.cycle}: Staff market - ${rival.name} recruited ${candidate.name} before we moved.`);
@@ -171,7 +193,7 @@ export function hireApplicant(state, candidateId) {
     return next;
   }
   next.company.cash -= cost;
-  next.engineers.push({
+  next.engineers.push(withGrowthFields({
     id: `eng-hired-${candidate.id}`,
     name: candidate.name,
     specialty: candidate.specialty,
@@ -180,9 +202,13 @@ export function hireApplicant(state, candidateId) {
     fatigue: candidate.fatigue,
     morale: candidate.morale,
     seniority: candidate.seniority,
+    experience: candidate.experience,
+    completedProjects: candidate.completedProjects,
+    specialtyExperience: candidate.specialtyExperience,
+    promotionHistory: candidate.promotionHistory,
     hiredCycle: next.company.cycle,
     assignedProjectId: null,
-  });
+  }));
   next.staffMarket.applicants = next.staffMarket.applicants.filter((item) => item.id !== candidateId);
   next.eventLog.unshift(`Cycle ${next.company.cycle}: Hired ${candidate.name} for CR ${cost.toLocaleString('en-US')} signing bonus.`);
   return next;
@@ -227,7 +253,7 @@ export function recruitFromRival(state, rivalId, staffId) {
   next.company.cash -= cost;
   rival.staff = rival.staff.filter((item) => item.id !== staffId);
   rival.lastAction = `Lost ${staff.name} to Orbital Works recruitment.`;
-  next.engineers.push({
+  next.engineers.push(withGrowthFields({
     id: `eng-rival-${staff.id}`,
     name: staff.name,
     specialty: staff.specialty,
@@ -236,10 +262,14 @@ export function recruitFromRival(state, rivalId, staffId) {
     fatigue: staff.fatigue ?? 10,
     morale: Math.max(45, staff.morale ?? 65),
     seniority: staff.seniority,
+    experience: staff.experience,
+    completedProjects: staff.completedProjects,
+    specialtyExperience: staff.specialtyExperience,
+    promotionHistory: staff.promotionHistory,
     hiredCycle: next.company.cycle,
     recruitedFrom: rival.name,
     assignedProjectId: null,
-  });
+  }));
   next.eventLog.unshift(`Cycle ${next.company.cycle}: Recruited ${staff.name} away from ${rival.name} for CR ${cost.toLocaleString('en-US')}.`);
   return next;
 }
