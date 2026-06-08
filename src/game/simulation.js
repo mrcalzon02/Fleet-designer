@@ -32,6 +32,18 @@ function normalizePriority(priority) {
   return Object.hasOwn(PRIORITY_ORDER, priority) ? priority : 'normal';
 }
 
+function activeProductionLineCount(state) {
+  return (state.productionRuns ?? []).filter((run) => ACTIVE_RUN_STATUSES.has(run.status)).length;
+}
+
+function productionLineCapacity(state) {
+  return state.company?.productionLineCapacity ?? 5;
+}
+
+function hasAvailableProductionLine(state) {
+  return activeProductionLineCount(state) < productionLineCapacity(state);
+}
+
 function canAffordBill(inventory, bill, quantity = 1) {
   return Object.entries(bill).every(([key, value]) => (inventory[key] ?? 0) >= value * quantity);
 }
@@ -189,6 +201,11 @@ export function queueProduction(state, designId, quantity = 1, purpose = 'market
   const normalizedQuantity = normalizeQuantity(quantity);
   if (!design) return next;
 
+  if (!hasAvailableProductionLine(next)) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Production blocked. All ${productionLineCapacity(next)} production lines are already queued or active.`);
+    return next;
+  }
+
   if (warehouseUsed(next) + normalizedQuantity > next.company.warehouseCapacity) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Production blocked. Finished goods warehouse is at capacity.`);
     return next;
@@ -212,7 +229,7 @@ export function queueProduction(state, designId, quantity = 1, purpose = 'market
   }));
 
   next.company.cash -= cashCost;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}. Cash overhead ${currency(cashCost)}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}. Cash overhead ${currency(cashCost)}. Production lines ${activeProductionLineCount(next)}/${productionLineCapacity(next)}.`);
   return next;
 }
 
@@ -231,6 +248,11 @@ export function queueContractProduction(state, contractId) {
   const existingRun = next.productionRuns.find((run) => run.contractId === contract.id && !['complete', 'canceled'].includes(run.status));
   if (existingRun) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production already active for ${contract.title}.`);
+    return next;
+  }
+
+  if (!hasAvailableProductionLine(next)) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. All ${productionLineCapacity(next)} production lines are already queued or active.`);
     return next;
   }
 
@@ -270,7 +292,7 @@ export function queueContractProduction(state, contractId) {
   next.productionRuns.push(run);
   contract.productionRunId = run.id;
   next.company.cash -= cashCost;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Cash overhead ${currency(cashCost)}. Payout reserved until delivery.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Cash overhead ${currency(cashCost)}. Production lines ${activeProductionLineCount(next)}/${productionLineCapacity(next)}. Payout reserved until delivery.`);
   return next;
 }
 
@@ -508,6 +530,7 @@ function allocateFactoryCapacity(next) {
   capacity = applyEngineeringCoverageToThroughput(capacity, coverage);
   next.company.productionEngineeringCoverage = {
     lineCount: coverage.lineCount,
+    lineCapacity: productionLineCapacity(next),
     engineerCount: coverage.engineerCount,
     ratio: coverage.ratio,
     label: coverage.label,
