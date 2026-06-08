@@ -3,6 +3,13 @@ setlocal
 cd /d "%~dp0"
 
 echo Starting Fleet Designer - Orbital Works...
+echo.
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo npm was not found on PATH. Install Node.js, then try again.
+  goto fail
+)
 
 if not exist node_modules (
   echo Installing project dependencies. This may take a while the first time.
@@ -10,6 +17,16 @@ if not exist node_modules (
   if errorlevel 1 goto fail
 )
 
+echo Running runtime diagnostics...
+call npm run diagnostics
+if errorlevel 1 (
+  echo.
+  echo Runtime diagnostics failed. The app was not launched because required files or imports are broken.
+  goto fail
+)
+
+echo.
+echo Diagnostics passed. Building and launching desktop shell...
 call npm run desktop
 if errorlevel 1 goto fail
 
