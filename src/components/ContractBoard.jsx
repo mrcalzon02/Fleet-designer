@@ -56,6 +56,7 @@ export function ContractBoard({ contracts, designs, productionRuns, finishedGood
               <strong>{contract.title}</strong>
               <small>{contract.client} // {contract.category} // {skullLabel(skulls)}</small>
               <p>Source: {contract.sourceType ?? 'legacy client'} // alignment {contract.alignment ?? 'commercial'} // terms {contract.precision ?? 'standard acceptance'}.</p>
+              {contract.performanceFocus && <p>Performance focus: {contract.performanceFocus}.</p>}
               {relation && <p>Client channel: {relation}.</p>}
               <p>Need {contract.quantity} x {contract.requiredType}. Verified delivered {verifiedDelivered}/{contract.quantity}. Deadline C{displayDeadline}. Reward {formatCredits(contract.reward)}. Penalty {formatCredits(contract.penalty)}.</p>
               {assignedDesign && <p>Promised goods: {contract.quantity} x {assignedDesign.name} ({assignedDesign.type}).</p>}
