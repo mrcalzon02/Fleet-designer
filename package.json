@@ -10,10 +10,11 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "diagnostics": "node scripts/runtime-diagnostics.mjs",
+    "repair:electron": "node scripts/repair-electron.mjs",
     "smoke": "npm run diagnostics && npm run build",
-    "desktop": "npm run build && electron .",
-    "dist:win": "npm run build && electron-builder --win portable",
-    "dist:win:installer": "npm run build && electron-builder --win nsis"
+    "desktop": "npm run repair:electron && npm run build && electron .",
+    "dist:win": "npm run repair:electron && npm run build && electron-builder --win portable",
+    "dist:win:installer": "npm run repair:electron && npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -29,8 +30,8 @@
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
     "globals": "latest",
-    "electron": "latest",
-    "electron-builder": "latest"
+    "electron": "38.4.0",
+    "electron-builder": "26.0.12"
   },
   "build": {
     "appId": "com.orbitalworks.fleetdesigner",
