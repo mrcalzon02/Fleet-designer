@@ -1,5 +1,6 @@
 import { getDifficultyProfile } from './difficultyProfiles.js';
 import { technologyTree } from './nodeLibrary.js';
+import { ensureStaffGrowthFields, grantProjectCompletionExperience, grantResearchCycleExperience, maybePromoteStaff, staffProgressLabel } from './staffGrowth.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -36,11 +37,17 @@ function unlockTechnology(next, techId) {
   }
 }
 
+function logPromotion(next, engineer, promotion) {
+  if (!promotion) return;
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Staff promotion - ${engineer.name} advanced from ${promotion.from} to ${promotion.to}. Skill ${promotion.skill}, salary CR ${promotion.salary.toLocaleString('en-US')}.`);
+}
+
 export function calculateResearchProgress(state, project) {
   const assigned = projectEngineers(state, project.id);
   if (assigned.length === 0) return 0;
 
   const rawProgress = assigned.reduce((sum, engineer) => {
+    ensureStaffGrowthFields(engineer);
     const specialtyMatch = engineer.specialty === project.discipline ? 4 : 0;
     const moraleBonus = engineer.morale >= 80 ? 2 : engineer.morale < 50 ? -1 : 0;
     const fatiguePenalty = engineer.fatigue >= 75 ? 4 : engineer.fatigue >= 50 ? 2 : 0;
@@ -51,8 +58,10 @@ export function calculateResearchProgress(state, project) {
 }
 
 export function researchStaffSummary(state, projectId) {
+  const assigned = projectEngineers(state, projectId);
+  for (const engineer of assigned) ensureStaffGrowthFields(engineer);
   return {
-    assigned: projectEngineers(state, projectId),
+    assigned,
     progressPerCycle: calculateResearchProgress(state, state.research.find((project) => project.id === projectId) ?? {}),
     difficultyTimeMultiplier: researchTimeMultiplier(state),
   };
@@ -64,9 +73,10 @@ export function assignEngineerToProject(state, engineerId, projectId) {
   const project = next.research.find((item) => item.id === projectId);
   if (!engineer || !project || project.status === 'complete') return next;
 
+  ensureStaffGrowthFields(engineer);
   engineer.assignedProjectId = projectId;
   project.stalled = false;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Assigned ${engineer.name} to ${project.name}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Assigned ${engineer.name} to ${project.name}. ${staffProgressLabel(engineer)}.`);
   return next;
 }
 
@@ -85,6 +95,8 @@ export function unassignEngineer(state, engineerId) {
 }
 
 export function progressResearchProjects(next) {
+  for (const engineer of next.engineers) ensureStaffGrowthFields(engineer);
+
   for (const project of next.research) {
     if (project.status !== 'active') continue;
 
@@ -95,6 +107,8 @@ export function progressResearchProjects(next) {
 
     project.progress += gain;
     for (const engineer of next.engineers.filter((item) => item.assignedProjectId === project.id)) {
+      grantResearchCycleExperience(engineer, project);
+      logPromotion(next, engineer, maybePromoteStaff(engineer, next.company.cycle));
       engineer.fatigue = Math.min(100, engineer.fatigue + 4);
       engineer.morale = Math.max(0, engineer.morale - (engineer.fatigue > 70 ? 2 : 0));
     }
@@ -104,6 +118,8 @@ export function progressResearchProjects(next) {
       project.status = 'complete';
       project.stalled = false;
       for (const engineer of next.engineers.filter((item) => item.assignedProjectId === project.id)) {
+        grantProjectCompletionExperience(engineer, project);
+        logPromotion(next, engineer, maybePromoteStaff(engineer, next.company.cycle));
         engineer.assignedProjectId = null;
         engineer.morale = Math.min(100, engineer.morale + 6);
       }
