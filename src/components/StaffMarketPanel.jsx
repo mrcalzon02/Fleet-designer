@@ -1,6 +1,7 @@
 import { rivalRecruitCost } from '../game/laborMarketSimulation.js';
 import { formatCredits } from '../game/simulation.js';
 import { staffProgressLabel } from '../game/staffGrowth.js';
+import { PortraitAtlas } from './PortraitAtlas.jsx';
 
 function specialtySummary(staff) {
   const entries = Object.entries(staff.specialtyExperience ?? {});
@@ -11,33 +12,39 @@ function specialtySummary(staff) {
 function PopulationCard({ staff, assignment, onReleaseEngineer, releaseEnabled = false, poolLabel = 'staff' }) {
   const severance = Math.round((staff.salary ?? 60000) / 6);
   return (
-    <div className="data-card">
-      <strong>{staff.name}</strong>
-      <small>{poolLabel} // {staff.seniority ?? 'staff'} // {staff.specialty} // skill {staff.skill} // salary {formatCredits(staff.salary)}</small>
-      <p>Morale {staff.morale}. Fatigue {staff.fatigue}. Assignment: {assignment ?? 'unassigned'}.</p>
-      <p>Experience: {staffProgressLabel(staff)}. Completed projects {staff.completedProjects ?? 0}.</p>
-      <p>Specialty XP: {specialtySummary(staff)}.</p>
-      {staff.lastExperienceGain && <p>Last XP: +{staff.lastExperienceGain.amount} {staff.lastExperienceGain.discipline} from {staff.lastExperienceGain.reason}.</p>}
-      {staff.promotionHistory?.length > 0 && <p>Promotions: {staff.promotionHistory.map((entry) => `C${entry.cycle} ${entry.from}->${entry.to}`).join(' // ')}.</p>}
-      {staff.recruitedFrom && <p>Recruited from {staff.recruitedFrom}.</p>}
-      {releaseEnabled && (
-        <button onClick={() => onReleaseEngineer(staff.id)} title={`Severance ${formatCredits(severance)}`}>
-          Release Engineer // {formatCredits(severance)}
-        </button>
-      )}
+    <div className="data-card profile-card">
+      <PortraitAtlas record={staff} label={`${poolLabel} profile`} />
+      <div className="profile-card-body">
+        <strong>{staff.name}</strong>
+        <small>{poolLabel} // {staff.seniority ?? 'staff'} // {staff.specialty} // skill {staff.skill} // salary {formatCredits(staff.salary)}</small>
+        <p>Morale {staff.morale}. Fatigue {staff.fatigue}. Assignment: {assignment ?? 'unassigned'}.</p>
+        <p>Experience: {staffProgressLabel(staff)}. Completed projects {staff.completedProjects ?? 0}.</p>
+        <p>Specialty XP: {specialtySummary(staff)}.</p>
+        {staff.lastExperienceGain && <p>Last XP: +{staff.lastExperienceGain.amount} {staff.lastExperienceGain.discipline} from {staff.lastExperienceGain.reason}.</p>}
+        {staff.promotionHistory?.length > 0 && <p>Promotions: {staff.promotionHistory.map((entry) => `C${entry.cycle} ${entry.from}->${entry.to}`).join(' // ')}.</p>}
+        {staff.recruitedFrom && <p>Recruited from {staff.recruitedFrom}.</p>}
+        {releaseEnabled && (
+          <button onClick={() => onReleaseEngineer(staff.id)} title={`Severance ${formatCredits(severance)}`}>
+            Release Engineer // {formatCredits(severance)}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 function ApplicantCard({ applicant, onHireApplicant }) {
   return (
-    <div className="data-card active">
-      <strong>{applicant.name}</strong>
-      <small>{applicant.seniority} // {applicant.specialty} // skill {applicant.skill}</small>
-      <p>{applicant.profile}</p>
-      <p>Experience: {staffProgressLabel(applicant)}. Specialty XP: {specialtySummary(applicant)}.</p>
-      <p>Salary {formatCredits(applicant.salary)}. Signing bonus {formatCredits(applicant.signingBonus)}. Leaves market after C{applicant.expiresCycle}.</p>
-      <button onClick={() => onHireApplicant(applicant.id)}>Hire Candidate</button>
+    <div className="data-card active profile-card">
+      <PortraitAtlas record={applicant} label="candidate profile" />
+      <div className="profile-card-body">
+        <strong>{applicant.name}</strong>
+        <small>{applicant.seniority} // {applicant.specialty} // skill {applicant.skill}</small>
+        <p>{applicant.profile}</p>
+        <p>Experience: {staffProgressLabel(applicant)}. Specialty XP: {specialtySummary(applicant)}.</p>
+        <p>Salary {formatCredits(applicant.salary)}. Signing bonus {formatCredits(applicant.signingBonus)}. Leaves market after C{applicant.expiresCycle}.</p>
+        <button onClick={() => onHireApplicant(applicant.id)}>Hire Candidate</button>
+      </div>
     </div>
   );
 }
@@ -45,13 +52,16 @@ function ApplicantCard({ applicant, onHireApplicant }) {
 function RivalStaffCard({ rival, staff, onRecruitFromRival }) {
   const cost = rivalRecruitCost(staff, rival);
   return (
-    <div className="data-card paused">
-      <strong>{staff.name}</strong>
-      <small>{rival.name} // {staff.seniority} // {staff.specialty} // skill {staff.skill}</small>
-      <p>{staff.profile}</p>
-      <p>Experience: {staffProgressLabel(staff)}. Completed projects {staff.completedProjects ?? 0}.</p>
-      <p>Salary {formatCredits(staff.salary)}. Loyalty {staff.loyalty}. Recruitment package {formatCredits(cost)}.</p>
-      <button onClick={() => onRecruitFromRival(rival.id, staff.id)}>Recruit From Rival</button>
+    <div className="data-card paused profile-card">
+      <PortraitAtlas record={staff} label={`${rival.name} staff profile`} />
+      <div className="profile-card-body">
+        <strong>{staff.name}</strong>
+        <small>{rival.name} // {staff.seniority} // {staff.specialty} // skill {staff.skill}</small>
+        <p>{staff.profile}</p>
+        <p>Experience: {staffProgressLabel(staff)}. Completed projects {staff.completedProjects ?? 0}.</p>
+        <p>Salary {formatCredits(staff.salary)}. Loyalty {staff.loyalty}. Recruitment package {formatCredits(cost)}.</p>
+        <button onClick={() => onRecruitFromRival(rival.id, staff.id)}>Recruit From Rival</button>
+      </div>
     </div>
   );
 }
@@ -70,7 +80,7 @@ export function StaffMarketPanel({ game, onHireApplicant, onReleaseEngineer, onR
       <article className="console-panel">
         <div className="panel-heading">
           <span>Space LinkedIn Staff Market</span>
-          <small>future tabs: researchers / engineers</small>
+          <small>8x8 portrait atlas // future tabs: researchers / engineers</small>
         </div>
         <p>{marketNote}</p>
         <div className="stack-list">
@@ -97,9 +107,9 @@ export function StaffMarketPanel({ game, onHireApplicant, onReleaseEngineer, onR
       <article className="console-panel">
         <div className="panel-heading">
           <span>Engineers</span>
-          <small>{engineers.length} production staff // {activeLineCount}/{productionLineCapacity} lines</small>
+          <small>{engineers.length} production staff // {activeLineCount}/{productionLineCapacity} owned lines</small>
         </div>
-        <p>At full factory load, 10 engineers over 5 lines gives the intended baseline of 2 engineers per production line.</p>
+        <p>At full factory load, 10 engineers over 5 owned lines gives the intended baseline of 2 engineers per production line. Overextension is allowed, but engineering coverage gets ugly.</p>
         <div className="stack-list">
           {engineers.map((engineer) => (
             <PopulationCard staff={engineer} assignment="production engineering pool" onReleaseEngineer={onReleaseEngineer} releaseEnabled poolLabel="engineer" key={engineer.id} />
@@ -126,6 +136,7 @@ export function StaffMarketPanel({ game, onHireApplicant, onReleaseEngineer, onR
           <small>separate researchers and engineers</small>
         </div>
         <p>Researchers and engineers are separate population pools. Researchers drive R&D. Engineers cover factory production lines, throughput, and defect risk.</p>
+        <p>Profile portraits are selected from an 8x8 atlas by stable staff identity. Place the atlas at public/assets/space-linkedin-portraits-8x8.png.</p>
         <p>The staff market still needs its next split: applicant generation should create researcher candidates and engineer candidates in separate tabs.</p>
         <p>Rival staff can be recruited if the compensation package is high enough. Loyalty and rival market share make those packages expensive.</p>
       </article>
