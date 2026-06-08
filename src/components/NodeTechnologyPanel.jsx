@@ -21,13 +21,15 @@ function placementLabel(placements, nodeId) {
   return placement ? `${placement.facing ?? 'east'} @ ${placement.x},${placement.y}` : 'unplaced';
 }
 
-function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
+function TemplateGrid({ template, placedCells = [], connectionMetrics, showPorts }) {
   if (!template) return null;
   const placed = new Map(placedCells.map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
   const ports = new Map();
 
-  for (const anchor of connectionMetrics?.portAnchors ?? []) {
-    ports.set(`${anchor.x},${anchor.y}`, anchor);
+  if (showPorts) {
+    for (const anchor of connectionMetrics?.portAnchors ?? []) {
+      ports.set(`${anchor.x},${anchor.y}`, anchor);
+    }
   }
 
   return (
@@ -51,8 +53,9 @@ function TemplateGrid({ template, placedCells = [], connectionMetrics }) {
   );
 }
 
-function ConnectionReport({ reports }) {
-  if (!reports || reports.length === 0) return <p>Interfaces: none.</p>;
+function ConnectionReport({ reports, blueprintType }) {
+  if (blueprintType !== 'component') return <p>Links: disabled. Module and vehicle editors use aggregate slot/category stats only.</p>;
+  if (!reports || reports.length === 0) return <p>Component links: none.</p>;
   return (
     <div className="connection-report">
       {reports.map((report, index) => (
@@ -64,14 +67,30 @@ function ConnectionReport({ reports }) {
   );
 }
 
+function LinkEffectsReport({ effects, blueprintType }) {
+  if (blueprintType !== 'component') return <p>Synergy engine bypassed for {blueprintType} designs.</p>;
+  const reports = effects?.linkReports ?? [];
+  if (reports.length === 0) return <p>No special synergies or incompatibilities detected.</p>;
+  return (
+    <div className="connection-report">
+      {reports.map((report, index) => (
+        <span className={`connection-link ${report.kind?.includes('incompatibility') || report.kind?.includes('degradation') ? 'mismatch' : 'adjacent'}`} key={`${report.name}-${index}`}>
+          {report.name} // {report.kind} // {formatStats(report.stats)} // {report.description}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function NodeCard({ node, unlocked }) {
   return (
     <div className={`data-card ${unlocked ? 'complete' : 'paused'}`}>
       <strong>{node.name}</strong>
-      <small>{node.family} // tier {node.tier} // {unlocked ? 'unlocked' : 'locked'}</small>
+      <small>{node.family} // tier {node.tier} // {unlocked ? 'unlocked' : 'locked'} // {node.researchLevel}</small>
       <p>{node.description}</p>
       <p>Stats: {formatStats(node.stats)}</p>
       <p>Ports: {node.ports.inputs} in / {node.ports.outputs} out. Shape: {node.shape.join(' / ')}.</p>
+      <p>Tags: {(node.tags ?? []).join(', ')}.</p>
     </div>
   );
 }
@@ -96,6 +115,7 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
   const template = availability.layout.template;
   const placedCells = availability.layout.placedCells ?? [];
   const reports = design.connectionMetrics?.reports ?? [];
+  const isComponent = blueprint.type === 'component';
   return (
     <div className={`data-card ${availability.available ? 'active' : 'paused'}`}>
       <strong>{blueprint.name}</strong>
@@ -103,13 +123,15 @@ function BlueprintCard({ blueprint, game, onCreateDesign }) {
       <p>{blueprint.description}</p>
       {template && <p>Template: {template.name}. {template.description}</p>}
       <p>Placements: {(blueprint.placements ?? []).map((placement) => `${nodeGlyph(placement.nodeId)} ${placementLabel(blueprint.placements ?? [], placement.nodeId)}`).join(' // ')}.</p>
-      <TemplateGrid template={template} placedCells={placedCells} connectionMetrics={design.connectionMetrics} />
-      <ConnectionReport reports={reports} />
-      <p>Interfaces: O = output contact, I = input contact. Component-node contacts influence prototype quality; modules and vehicles use slot/category/stat aggregation elsewhere.</p>
-      <p>Contact modifiers: {formatStats(design.connectionMetrics?.summary ?? {})}</p>
+      <TemplateGrid template={template} placedCells={placedCells} connectionMetrics={design.connectionMetrics} showPorts={isComponent} />
+      <ConnectionReport reports={reports} blueprintType={blueprint.type} />
+      <LinkEffectsReport effects={design.componentLinkEffects} blueprintType={blueprint.type} />
+      <p>{isComponent ? 'Component chains use logical node linking, synergies, incompatibilities, and degradation effects.' : 'Aggregate-only grid: no linking, no route mechanics, no chain contacts.'}</p>
+      <p>Link modifiers: {formatStats(design.connectionMetrics?.summary ?? {})}</p>
+      <p>Synergy modifiers: {formatStats(design.componentLinkEffects?.summary ?? {})}</p>
       <p>Calculated design: quality {design.quality}, reliability {design.reliability}, cost CR {design.cost.toLocaleString('en-US')}, sale CR {design.salePrice.toLocaleString('en-US')}.</p>
       <p>Bill: {formatBill(design.bill)}.</p>
-      <p>Chain effects: {formatStats(design.chainStats)}</p>
+      <p>Aggregate effects: {formatStats(design.chainStats)}</p>
       <p>Layout: area {footprint.area}, span {footprint.width}w x {footprint.height}h, ports {footprint.inputs} in / {footprint.outputs} out, placed cells {footprint.placedCells}.</p>
       {!availability.nodeAccess && <p>Missing nodes: {availability.missingNodes.map((node) => node.name).join(', ')}.</p>}
       {!availability.layoutValid && <p>Layout issues: {availability.layout.issues.join('; ')}.</p>}
