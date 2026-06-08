@@ -3,7 +3,7 @@ import { grantStaffExperience, maybePromoteStaff } from './staffGrowth.js';
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'active']);
 
 export function availableProductionEngineers(state) {
-  return (state.engineers ?? []).filter((engineer) => !engineer.assignedProjectId);
+  return state.engineers ?? [];
 }
 
 export function activeProductionLines(state) {
