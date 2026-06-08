@@ -20,7 +20,7 @@ export const contractSources = [
     minReputation: 12,
     reputationKey: 'frontier',
     description: 'Remote operators that value rugged serviceability, forgiving terms, and usable delivery more than polished excellence.',
-    preferredTypes: ['module', 'vessel'],
+    preferredTypes: ['component', 'module', 'vessel'],
     payoutBias: 0.82,
     reliabilityBias: 2,
     qualityBias: -3,
@@ -46,7 +46,7 @@ export const contractSources = [
     minReputation: 18,
     reputationKey: 'industrial',
     description: 'Bulk logistics buyers that reward quantity, turnaround speed, and acceptable industrial reliability.',
-    preferredTypes: ['module', 'vessel'],
+    preferredTypes: ['component', 'module', 'vessel'],
     payoutBias: 1.0,
     reliabilityBias: 3,
     qualityBias: 0,
@@ -72,7 +72,7 @@ export const contractSources = [
     minReputation: 38,
     reputationKey: 'security',
     description: 'Security and patrol clients demanding high reliability, tight deadlines, and clean production records.',
-    preferredTypes: ['module', 'vessel'],
+    preferredTypes: ['component', 'module', 'vessel'],
     payoutBias: 1.22,
     reliabilityBias: 10,
     qualityBias: 6,
@@ -85,7 +85,7 @@ export const contractSources = [
     minReputation: 45,
     reputationKey: 'premium',
     description: 'Prestige buyers who pay well but demand exact results, clean finishes, and higher quality thresholds.',
-    preferredTypes: ['module', 'vessel'],
+    preferredTypes: ['component', 'module', 'vessel'],
     payoutBias: 1.35,
     reliabilityBias: 7,
     qualityBias: 12,
@@ -106,61 +106,18 @@ export const contractSources = [
 ];
 
 export const contractTemplates = [
-  {
-    id: 'ctpl-component-replacement',
-    titleNoun: 'replacement batch',
-    category: 'component order',
-    requiredType: 'component',
-    baseQuantity: 3,
-    baseReward: 460000,
-    basePenalty: 110000,
-    baseDeadline: 6,
-    description: 'Routine component replacement work with modest inspection requirements.',
-  },
-  {
-    id: 'ctpl-module-retrofit',
-    titleNoun: 'retrofit package',
-    category: 'module order',
-    requiredType: 'module',
-    baseQuantity: 2,
-    baseReward: 980000,
-    basePenalty: 240000,
-    baseDeadline: 7,
-    description: 'Module-level refit work for ships, stations, depots, or industrial yards.',
-  },
-  {
-    id: 'ctpl-vessel-tender',
-    titleNoun: 'vessel tender',
-    category: 'full vessel build',
-    requiredType: 'vessel',
-    baseQuantity: 1,
-    baseReward: 2800000,
-    basePenalty: 650000,
-    baseDeadline: 8,
-    description: 'A complete vessel order with contract acceptance gated by design credibility.',
-  },
-  {
-    id: 'ctpl-urgent-yard-support',
-    titleNoun: 'urgent yard support order',
-    category: 'rush industrial support',
-    requiredType: 'module',
-    baseQuantity: 1,
-    baseReward: 1200000,
-    basePenalty: 420000,
-    baseDeadline: 4,
-    description: 'Short-deadline work with strong payout but harsher deadline risk.',
-  },
-  {
-    id: 'ctpl-bulk-standardization',
-    titleNoun: 'standardization lot',
-    category: 'bulk standardization',
-    requiredType: 'component',
-    baseQuantity: 6,
-    baseReward: 620000,
-    basePenalty: 160000,
-    baseDeadline: 9,
-    description: 'Larger quantity standardization work with lower precision requirements and thin margins.',
-  },
+  { id: 'ctpl-component-replacement', titleNoun: 'replacement batch', category: 'component order', requiredType: 'component', baseQuantity: 3, baseReward: 460000, basePenalty: 110000, baseDeadline: 6, performanceFocus: 'basic reliability', description: 'Routine component replacement work with modest inspection requirements.' },
+  { id: 'ctpl-component-power-chain', titleNoun: 'power-chain component lot', category: 'component power tender', requiredType: 'component', baseQuantity: 2, baseReward: 680000, basePenalty: 180000, baseDeadline: 7, performanceFocus: 'power stability and reliability', description: 'Component buyers want better power handling and cleaner chain behavior for downstream module builders.' },
+  { id: 'ctpl-component-control-certification', titleNoun: 'control certification batch', category: 'component control certification', requiredType: 'component', baseQuantity: 2, baseReward: 760000, basePenalty: 230000, baseDeadline: 8, performanceFocus: 'automation and defect suppression', description: 'Inspection-heavy component work focused on control reliability, defect suppression, and clean documentation.' },
+  { id: 'ctpl-component-thermal-emergency', titleNoun: 'thermal emergency kit', category: 'component thermal order', requiredType: 'component', baseQuantity: 4, baseReward: 590000, basePenalty: 210000, baseDeadline: 5, performanceFocus: 'heat reduction', description: 'Customers need cooling components quickly and will tolerate some ugliness if heat reduction is meaningful.' },
+  { id: 'ctpl-module-retrofit', titleNoun: 'retrofit package', category: 'module order', requiredType: 'module', baseQuantity: 2, baseReward: 980000, basePenalty: 240000, baseDeadline: 7, performanceFocus: 'balanced module reliability', description: 'Module-level refit work for ships, stations, depots, or industrial yards.' },
+  { id: 'ctpl-module-propulsion-upfit', titleNoun: 'propulsion upfit package', category: 'module propulsion order', requiredType: 'module', baseQuantity: 1, baseReward: 1350000, basePenalty: 360000, baseDeadline: 7, performanceFocus: 'thrust and thermal tolerance', description: 'Drive-adjacent module work with higher payout and harsher heat/power expectations.' },
+  { id: 'ctpl-module-cargo-automation', titleNoun: 'automated cargo module lot', category: 'module automation order', requiredType: 'module', baseQuantity: 2, baseReward: 1120000, basePenalty: 260000, baseDeadline: 8, performanceFocus: 'automation and serviceability', description: 'Cargo handlers want modules that automate well without becoming maintenance disasters.' },
+  { id: 'ctpl-vessel-tender', titleNoun: 'vessel tender', category: 'full vessel build', requiredType: 'vessel', baseQuantity: 1, baseReward: 2800000, basePenalty: 650000, baseDeadline: 8, performanceFocus: 'full-system credibility', description: 'A complete vessel order with contract acceptance gated by design credibility.' },
+  { id: 'ctpl-vessel-frontier-workboat', titleNoun: 'frontier workboat tender', category: 'rugged vessel build', requiredType: 'vessel', baseQuantity: 1, baseReward: 2350000, basePenalty: 520000, baseDeadline: 9, performanceFocus: 'rugged reliability and low service burden', description: 'Frontier operators care less about polish and more about serviceable workboats that survive neglect.' },
+  { id: 'ctpl-vessel-survey-platform', titleNoun: 'survey platform tender', category: 'precision vessel build', requiredType: 'vessel', baseQuantity: 1, baseReward: 3400000, basePenalty: 820000, baseDeadline: 10, performanceFocus: 'precision, reliability, and instrumentation', description: 'Survey customers demand cleaner integration and higher design confidence.' },
+  { id: 'ctpl-urgent-yard-support', titleNoun: 'urgent yard support order', category: 'rush industrial support', requiredType: 'module', baseQuantity: 1, baseReward: 1200000, basePenalty: 420000, baseDeadline: 4, performanceFocus: 'speed and acceptable quality', description: 'Short-deadline work with strong payout but harsher deadline risk.' },
+  { id: 'ctpl-bulk-standardization', titleNoun: 'standardization lot', category: 'bulk standardization', requiredType: 'component', baseQuantity: 6, baseReward: 620000, basePenalty: 160000, baseDeadline: 9, performanceFocus: 'repeatability and low defect escape', description: 'Larger quantity standardization work with lower precision requirements and thin margins.' },
 ];
 
 function clamp(value, min, max) {
@@ -267,8 +224,10 @@ function difficultyTerms(source, template, skulls, relationshipScore) {
   const reward = Math.round(template.baseReward * quantity * source.payoutBias * relationshipReward * (skulls === 1 ? 0.85 : skulls === 2 ? 1.22 : 1.75));
   const penalty = Math.round(template.basePenalty * (skulls === 1 ? 0.75 : skulls === 2 ? 1.25 : 1.85));
   const deadline = Math.max(3, Math.round(template.baseDeadline + (skulls === 1 ? 3 : skulls === 2 ? 0 : -2) + relationshipDeadlineModifier(relationshipScore, skulls)));
-  const minQuality = Math.max(0, Math.round(35 + source.qualityBias + (skulls - 1) * 12 + requirementModifier));
-  const minReliability = Math.max(0, Math.round(38 + source.reliabilityBias + (skulls - 1) * 11 + requirementModifier));
+  const typeStrictness = template.requiredType === 'component' ? 2 : template.requiredType === 'module' ? 0 : 4;
+  const focusStrictness = template.performanceFocus?.includes('precision') || template.performanceFocus?.includes('certification') ? 4 : 0;
+  const minQuality = Math.max(0, Math.round(35 + source.qualityBias + (skulls - 1) * 12 + requirementModifier + typeStrictness + focusStrictness));
+  const minReliability = Math.max(0, Math.round(38 + source.reliabilityBias + (skulls - 1) * 11 + requirementModifier + typeStrictness + focusStrictness));
   const precision = skulls === 1 ? 'loose acceptance' : skulls === 2 ? 'documented acceptance' : 'exacting acceptance';
   return { quantity, reward, penalty, deadline, minQuality, minReliability, precision };
 }
@@ -308,6 +267,7 @@ export function generateContractForCompany(state, seedOffset = 0) {
     earnedReward: 0,
     skulls,
     precision: terms.precision,
+    performanceFocus: template.performanceFocus,
     relationshipScore,
     relationshipTier,
     relationshipPayoutMultiplier: Number(relationshipPayoutMultiplier(relationshipScore).toFixed(2)),
@@ -318,15 +278,15 @@ export function generateContractForCompany(state, seedOffset = 0) {
   };
 }
 
-export function replenishOpenContracts(next, targetOpenContracts = 5) {
+export function replenishOpenContracts(next, targetOpenContracts = 6) {
   next.contracts = next.contracts ?? [];
   const openCount = next.contracts.filter((contract) => contract.status === 'open').length;
   const toCreate = Math.max(0, targetOpenContracts - openCount);
-  for (let index = 0; index < Math.min(2, toCreate); index += 1) {
+  for (let index = 0; index < Math.min(3, toCreate); index += 1) {
     const generated = generateContractForCompany(next, index + next.contracts.length);
     if (!next.contracts.some((contract) => contract.id === generated.id)) {
       next.contracts.push(generated);
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: New ${skullLabel(generated.skulls)} ${generated.relationshipTier} contract posted by ${generated.client}: ${generated.title}.`);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: New ${skullLabel(generated.skulls)} ${generated.relationshipTier} ${generated.requiredType} contract posted by ${generated.client}: ${generated.title}.`);
     }
   }
 }
