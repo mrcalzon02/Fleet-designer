@@ -4,8 +4,12 @@ import { ensureStaffGrowthFields, grantProjectCompletionExperience, grantResearc
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-function projectEngineers(state, projectId) {
-  return state.engineers.filter((engineer) => engineer.assignedProjectId === projectId);
+function researchPool(state) {
+  return state.researchers ?? [];
+}
+
+function projectResearchers(state, projectId) {
+  return researchPool(state).filter((researcher) => researcher.assignedProjectId === projectId);
 }
 
 function researchTimeMultiplier(state) {
@@ -37,29 +41,29 @@ function unlockTechnology(next, techId) {
   }
 }
 
-function logPromotion(next, engineer, promotion) {
+function logPromotion(next, researcher, promotion) {
   if (!promotion) return;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Staff promotion - ${engineer.name} advanced from ${promotion.from} to ${promotion.to}. Skill ${promotion.skill}, salary CR ${promotion.salary.toLocaleString('en-US')}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Research promotion - ${researcher.name} advanced from ${promotion.from} to ${promotion.to}. Skill ${promotion.skill}, salary CR ${promotion.salary.toLocaleString('en-US')}.`);
 }
 
 export function calculateResearchProgress(state, project) {
-  const assigned = projectEngineers(state, project.id);
+  const assigned = projectResearchers(state, project.id);
   if (assigned.length === 0) return 0;
 
-  const rawProgress = assigned.reduce((sum, engineer) => {
-    ensureStaffGrowthFields(engineer);
-    const specialtyMatch = engineer.specialty === project.discipline ? 4 : 0;
-    const moraleBonus = engineer.morale >= 80 ? 2 : engineer.morale < 50 ? -1 : 0;
-    const fatiguePenalty = engineer.fatigue >= 75 ? 4 : engineer.fatigue >= 50 ? 2 : 0;
-    return sum + Math.max(1, engineer.skill * 5 + specialtyMatch + moraleBonus - fatiguePenalty);
+  const rawProgress = assigned.reduce((sum, researcher) => {
+    ensureStaffGrowthFields(researcher);
+    const specialtyMatch = researcher.specialty === project.discipline ? 4 : 0;
+    const moraleBonus = researcher.morale >= 80 ? 2 : researcher.morale < 50 ? -1 : 0;
+    const fatiguePenalty = researcher.fatigue >= 75 ? 4 : researcher.fatigue >= 50 ? 2 : 0;
+    return sum + Math.max(1, researcher.skill * 5 + specialtyMatch + moraleBonus - fatiguePenalty);
   }, 0);
 
   return Math.max(1, Math.round(rawProgress / researchTimeMultiplier(state)));
 }
 
 export function researchStaffSummary(state, projectId) {
-  const assigned = projectEngineers(state, projectId);
-  for (const engineer of assigned) ensureStaffGrowthFields(engineer);
+  const assigned = projectResearchers(state, projectId);
+  for (const researcher of assigned) ensureStaffGrowthFields(researcher);
   return {
     assigned,
     progressPerCycle: calculateResearchProgress(state, state.research.find((project) => project.id === projectId) ?? {}),
@@ -67,35 +71,42 @@ export function researchStaffSummary(state, projectId) {
   };
 }
 
-export function assignEngineerToProject(state, engineerId, projectId) {
+export function assignResearcherToProject(state, researcherId, projectId) {
   const next = clone(state);
-  const engineer = next.engineers.find((item) => item.id === engineerId);
+  next.researchers = next.researchers ?? [];
+  const researcher = next.researchers.find((item) => item.id === researcherId);
   const project = next.research.find((item) => item.id === projectId);
-  if (!engineer || !project || project.status === 'complete') return next;
+  if (!researcher || !project || project.status === 'complete') return next;
 
-  ensureStaffGrowthFields(engineer);
-  engineer.assignedProjectId = projectId;
+  ensureStaffGrowthFields(researcher);
+  researcher.assignedProjectId = projectId;
   project.stalled = false;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Assigned ${engineer.name} to ${project.name}. ${staffProgressLabel(engineer)}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Assigned researcher ${researcher.name} to ${project.name}. ${staffProgressLabel(researcher)}.`);
   return next;
 }
 
-export function unassignEngineer(state, engineerId) {
+export function unassignResearcher(state, researcherId) {
   const next = clone(state);
-  const engineer = next.engineers.find((item) => item.id === engineerId);
-  if (!engineer) return next;
+  next.researchers = next.researchers ?? [];
+  const researcher = next.researchers.find((item) => item.id === researcherId);
+  if (!researcher) return next;
 
-  const project = next.research.find((item) => item.id === engineer.assignedProjectId);
-  engineer.assignedProjectId = null;
-  if (project && !next.engineers.some((item) => item.assignedProjectId === project.id)) {
+  const project = next.research.find((item) => item.id === researcher.assignedProjectId);
+  researcher.assignedProjectId = null;
+  if (project && !next.researchers.some((item) => item.assignedProjectId === project.id)) {
     project.stalled = project.status !== 'complete';
   }
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Unassigned ${engineer.name} from R&D work.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Unassigned researcher ${researcher.name} from R&D work.`);
   return next;
 }
 
+// Backward-compatible aliases used by older UI wiring.
+export const assignEngineerToProject = assignResearcherToProject;
+export const unassignEngineer = unassignResearcher;
+
 export function progressResearchProjects(next) {
-  for (const engineer of next.engineers) ensureStaffGrowthFields(engineer);
+  next.researchers = next.researchers ?? [];
+  for (const researcher of next.researchers) ensureStaffGrowthFields(researcher);
 
   for (const project of next.research) {
     if (project.status !== 'active') continue;
@@ -106,22 +117,22 @@ export function progressResearchProjects(next) {
     if (gain <= 0) continue;
 
     project.progress += gain;
-    for (const engineer of next.engineers.filter((item) => item.assignedProjectId === project.id)) {
-      grantResearchCycleExperience(engineer, project);
-      logPromotion(next, engineer, maybePromoteStaff(engineer, next.company.cycle));
-      engineer.fatigue = Math.min(100, engineer.fatigue + 4);
-      engineer.morale = Math.max(0, engineer.morale - (engineer.fatigue > 70 ? 2 : 0));
+    for (const researcher of next.researchers.filter((item) => item.assignedProjectId === project.id)) {
+      grantResearchCycleExperience(researcher, project);
+      logPromotion(next, researcher, maybePromoteStaff(researcher, next.company.cycle));
+      researcher.fatigue = Math.min(100, researcher.fatigue + 4);
+      researcher.morale = Math.max(0, researcher.morale - (researcher.fatigue > 70 ? 2 : 0));
     }
 
     if (project.progress >= project.required) {
       project.progress = project.required;
       project.status = 'complete';
       project.stalled = false;
-      for (const engineer of next.engineers.filter((item) => item.assignedProjectId === project.id)) {
-        grantProjectCompletionExperience(engineer, project);
-        logPromotion(next, engineer, maybePromoteStaff(engineer, next.company.cycle));
-        engineer.assignedProjectId = null;
-        engineer.morale = Math.min(100, engineer.morale + 6);
+      for (const researcher of next.researchers.filter((item) => item.assignedProjectId === project.id)) {
+        grantProjectCompletionExperience(researcher, project);
+        logPromotion(next, researcher, maybePromoteStaff(researcher, next.company.cycle));
+        researcher.assignedProjectId = null;
+        researcher.morale = Math.min(100, researcher.morale + 6);
       }
       if (project.discipline === 'supply chain') next.company.burnRate = Math.round(next.company.burnRate * 0.94);
       if (project.discipline === 'manufacturing') next.company.factoryCapacity += 1;
@@ -130,8 +141,8 @@ export function progressResearchProjects(next) {
     }
   }
 
-  for (const engineer of next.engineers.filter((item) => !item.assignedProjectId)) {
-    engineer.fatigue = Math.max(0, engineer.fatigue - 5);
-    engineer.morale = Math.min(100, engineer.morale + 1);
+  for (const researcher of next.researchers.filter((item) => !item.assignedProjectId)) {
+    researcher.fatigue = Math.max(0, researcher.fatigue - 5);
+    researcher.morale = Math.min(100, researcher.morale + 1);
   }
 }
