@@ -1,6 +1,7 @@
 import { replenishOpenContracts } from './contractContent.js';
 import { applyContractFailureRelations, applyContractFulfillmentRelations } from './contractRelations.js';
 import { calculateDefectRisk, calculateOperatingBurn, calculateProductionCashCost } from './difficultyEffects.js';
+import { applyEngineeringCoverageToDefectRisk, applyEngineeringCoverageToThroughput, calculateEngineeringCoverage, grantProductionOversightExperience } from './productionEngineering.js';
 import { progressResearchProjects } from './researchSimulation.js';
 import { advanceRivalCompanies } from './rivalSimulation.js';
 import { processSupplyContracts, updateCommodityPrices } from './supplySimulation.js';
@@ -86,6 +87,7 @@ export function designMeetsContractPressure(design, contract) {
 function buildProductionRun(state, design, quantity, purpose, options = {}) {
   const normalizedQuantity = normalizeQuantity(quantity);
   const complexity = design.type === 'vessel' ? 4 : design.type === 'module' ? 3 : 2;
+  const baseDefectRisk = calculateDefectRisk(state, design);
   return {
     id: `run-${Date.now()}-${Math.round(Math.random() * 10000)}`,
     designId: design.id,
@@ -102,7 +104,9 @@ function buildProductionRun(state, design, quantity, purpose, options = {}) {
     materialBill: { ...design.bill },
     priority: normalizePriority(options.priority),
     queuedCycle: options.queuedCycle ?? null,
-    defectRisk: calculateDefectRisk(state, design),
+    baseDefectRisk,
+    defectRisk: baseDefectRisk,
+    engineeringCoverageLabel: 'not yet in production',
     qaResult: null,
     stockLotId: null,
     status: 'queued',
@@ -128,6 +132,9 @@ function addFinishedGoods(next, run) {
     contractId: run.contractId,
     unitSalePrice: run.unitSalePrice,
     qaResult: run.qaResult,
+    engineeringCoverageLabel: run.engineeringCoverageLabel,
+    engineeringCoverageRatio: run.engineeringCoverageRatio,
+    defectRisk: run.defectRisk,
     status: run.revenueMode === 'contract' ? 'reserved-contract' : 'available-market',
     createdCycle: next.company.cycle,
     age: 0,
@@ -449,7 +456,7 @@ function completeProduction(next, run) {
 
   if (run.revenueMode === 'market') {
     next.eventLog.unshift(
-      `Cycle ${next.company.cycle}: Completed ${run.quantity} x ${run.designName}. Stock lot ${lot.id} moved to finished goods for market sale. QA: ${run.qaResult}. Defect risk ${run.defectRisk}%.`
+      `Cycle ${next.company.cycle}: Completed ${run.quantity} x ${run.designName}. Stock lot ${lot.id} moved to finished goods for market sale. QA: ${run.qaResult}. Defect risk ${run.defectRisk}%. Engineering coverage: ${run.engineeringCoverageLabel}.`
     );
     return;
   }
@@ -458,12 +465,12 @@ function completeProduction(next, run) {
     const contract = next.contracts.find((item) => item.id === run.contractId);
     if (contract) contract.stockLotId = lot.id;
     next.eventLog.unshift(
-      `Cycle ${next.company.cycle}: Contract batch completed for ${run.designName}. Stock lot ${lot.id} reserved for delivery. QA: ${run.qaResult}. Defect risk ${run.defectRisk}%.`
+      `Cycle ${next.company.cycle}: Contract batch completed for ${run.designName}. Stock lot ${lot.id} reserved for delivery. QA: ${run.qaResult}. Defect risk ${run.defectRisk}%. Engineering coverage: ${run.engineeringCoverageLabel}.`
     );
     return;
   }
 
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Completed internal production for ${run.designName}. Stock lot ${lot.id} stored. Defect risk ${run.defectRisk}%.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Completed internal production for ${run.designName}. Stock lot ${lot.id} stored. Defect risk ${run.defectRisk}%. Engineering coverage: ${run.engineeringCoverageLabel}.`);
 }
 
 function resolveContractDeadlines(next) {
@@ -497,9 +504,28 @@ function allocateFactoryCapacity(next) {
       return (a.queuedCycle ?? 0) - (b.queuedCycle ?? 0);
     });
 
+  const coverage = calculateEngineeringCoverage(next, activeRuns.length);
+  capacity = applyEngineeringCoverageToThroughput(capacity, coverage);
+  next.company.productionEngineeringCoverage = {
+    lineCount: coverage.lineCount,
+    engineerCount: coverage.engineerCount,
+    ratio: coverage.ratio,
+    label: coverage.label,
+    defectMultiplier: coverage.defectMultiplier,
+    throughputMultiplier: coverage.throughputMultiplier,
+  };
+
+  const promotions = grantProductionOversightExperience(next, coverage);
+  for (const { engineer, promotion } of promotions) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Production oversight promotion - ${engineer.name} advanced from ${promotion.from} to ${promotion.to}. Skill ${promotion.skill}, salary CR ${promotion.salary.toLocaleString('en-US')}.`);
+  }
+
   for (const run of activeRuns) {
     if (capacity <= 0) break;
     run.status = 'active';
+    run.engineeringCoverageLabel = coverage.label;
+    run.engineeringCoverageRatio = coverage.ratio;
+    run.defectRisk = applyEngineeringCoverageToDefectRisk(run.baseDefectRisk ?? run.defectRisk, coverage);
     const remaining = Math.max(0, run.required - run.progress);
     const applied = Math.min(remaining, capacity);
     run.progress += applied;
@@ -536,7 +562,8 @@ export function advanceCycle(state) {
     next.company.status = 'bankrupt';
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Bankruptcy triggered. Welcome to the intergalactic breadline.`);
   } else {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Operating burn ${currency(operatingBurn)}, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, supply, warehouse, rival watch, and contract sourcing processed.`);
+    const coverage = next.company.productionEngineeringCoverage;
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Operating burn ${currency(operatingBurn)}, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, engineering ${coverage?.engineerCount ?? 0}/${coverage?.lineCount ?? 0} lines (${coverage?.label ?? 'none'}), supply, warehouse, rival watch, and contract sourcing processed.`);
   }
 
   next.eventLog = next.eventLog.slice(0, 18);
