@@ -10,6 +10,7 @@ const requiredFiles = [
   'src/App.jsx',
   'src/game/simulation.js',
   'src/game/connectionMetrics.js',
+  'src/game/componentLinkEffects.js',
   'src/game/designSimulation.js',
   'src/game/initialState.js',
   'electron/main.cjs',
@@ -58,10 +59,27 @@ async function checkForbiddenImports() {
 async function checkPackageScripts() {
   const failures = [];
   const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-  for (const scriptName of ['build', 'desktop']) {
+  for (const scriptName of ['build', 'desktop', 'diagnostics', 'smoke']) {
     if (!packageJson.scripts?.[scriptName]) failures.push(`Missing package script: ${scriptName}`);
   }
   if (packageJson.main !== 'electron/main.cjs') failures.push('package.json main must point to electron/main.cjs for desktop launch.');
+  return failures;
+}
+
+async function checkComponentOnlyLinkBoundary() {
+  const failures = [];
+  const file = 'src/game/designSimulation.js';
+  if (!(await exists(file))) return failures;
+  const content = await readFile(path.join(root, file), 'utf8');
+  if (!content.includes("if (blueprint.type !== 'component')")) {
+    failures.push('designSimulation.js must explicitly bypass node-link effects for non-component blueprints.');
+  }
+  if (!content.includes("connections: blueprint.type === 'component'")) {
+    failures.push('designSimulation.js must only persist blueprint connections for component designs.');
+  }
+  if (!content.includes('evaluateComponentLinkEffects')) {
+    failures.push('designSimulation.js must use the component link effect engine for component blueprints.');
+  }
   return failures;
 }
 
@@ -71,6 +89,7 @@ async function main() {
     ...(await checkRequiredFiles()),
     ...(await checkForbiddenImports()),
     ...(await checkPackageScripts()),
+    ...(await checkComponentOnlyLinkBoundary()),
   ];
 
   if (failures.length > 0) {
@@ -79,7 +98,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('Runtime diagnostics passed. Required launch/build files are present and stale routing imports were not found.');
+  console.log('Runtime diagnostics passed. Required launch/build files are present, stale routing imports were not found, and node links are component-only.');
 }
 
 main().catch((error) => {
