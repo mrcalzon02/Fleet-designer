@@ -14,7 +14,7 @@ import { VehicleAssemblyPanel } from './components/VehicleAssemblyPanel.jsx';
 import { createDesignFromBlueprint } from './game/designSimulation.js';
 import { initialGameState } from './game/initialState.js';
 import { hireApplicant, processStaffMarket, recruitFromRival, releaseEngineer } from './game/laborMarketSimulation.js';
-import { assignEngineerToProject, unassignEngineer } from './game/researchSimulation.js';
+import { assignResearcherToProject, unassignResearcher } from './game/researchSimulation.js';
 import { setCompanyDifficulty } from './game/setupSimulation.js';
 import { buySpotMaterial, defaultRefineryRecipes, queueRefineryJob, toggleSupplyContract } from './game/supplySimulation.js';
 import { createVehicleDesignFromAssembly } from './game/vehicleDesignSimulation.js';
@@ -181,13 +181,13 @@ function App() {
 
       <OperationsPanels
         research={game.research}
-        engineers={game.engineers}
+        researchers={game.researchers ?? []}
         marketListings={game.marketListings}
         eventLog={game.eventLog}
         companyName={game.company.name}
         onBuyLicense={(listingId) => applyAction((state) => buyLicense(state, listingId))}
-        onAssignEngineer={(engineerId, projectId) => applyAction((state) => assignEngineerToProject(state, engineerId, projectId))}
-        onUnassignEngineer={(engineerId) => applyAction((state) => unassignEngineer(state, engineerId))}
+        onAssignResearcher={(researcherId, projectId) => applyAction((state) => assignResearcherToProject(state, researcherId, projectId))}
+        onUnassignResearcher={(researcherId) => applyAction((state) => unassignResearcher(state, researcherId))}
       />
 
       <NodeTechnologyPanel game={game} onCreateDesign={(blueprintId) => applyAction((state) => createDesignFromBlueprint(state, blueprintId))} />
