@@ -1,4 +1,6 @@
-export const componentNodeLibrary = [
+import { expandedComponentNodes, expandedTechnologyUnlocks } from './nodeLibraryExtensions.js';
+
+const baseComponentNodeLibrary = [
   {
     id: 'node-crude-power-bus',
     name: 'Crude Power Bus',
@@ -30,7 +32,7 @@ export const componentNodeLibrary = [
     name: 'Primitive Reactor Tap',
     family: 'reactor',
     tier: 0,
-    researchLevel: 'hazardous prototype',
+    researchLevel: 'prototype reactor access',
     description: 'A rough reactor extraction tap with poor isolation. It provides serious output for early designs, but generates extreme heat and regular fault events.',
     affects: ['power output', 'heat', 'failure rate', 'crew risk'],
     stats: { powerOutput: 34, heat: 28, reliability: -24, defectRisk: 18, maintenance: 26, crewRisk: 16, mass: 18 },
@@ -157,6 +159,27 @@ export const componentNodeLibrary = [
   },
 ];
 
+function mergeUnique(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function expandUnlocks(tech) {
+  return {
+    ...tech,
+    unlocks: mergeUnique([
+      ...(tech.unlocks ?? []).map((id) => ({ id })).map((entry) => entry.id),
+      ...(expandedTechnologyUnlocks[tech.id] ?? []),
+    ]),
+  };
+}
+
+export const componentNodeLibrary = mergeUnique([...baseComponentNodeLibrary, ...expandedComponentNodes]);
+
 export const technologyTree = [
   {
     id: 'tech-scrap-industrial-basics',
@@ -177,12 +200,12 @@ export const technologyTree = [
   },
   {
     id: 'tech-hazardous-reactor-access',
-    name: 'Hazardous Reactor Access',
+    name: 'Prototype Reactor Access',
     tier: 1,
     family: 'reactor',
     prerequisites: ['tech-scrap-industrial-basics'],
     unlocks: ['node-primitive-reactor-tap'],
-    description: 'Dangerous early power extraction. High output, terrible heat profile, ugly risk.',
+    description: 'Rough early power extraction. High output, terrible heat profile, ugly risk.',
   },
   {
     id: 'tech-fault-tolerant-controls',
@@ -229,7 +252,7 @@ export const technologyTree = [
     unlocks: ['node-compact-reactor-spine'],
     description: 'The reactor exception path: smaller, cleaner, higher-output power generation that makes late power-hungry systems viable.',
   },
-];
+].map(expandUnlocks);
 
 export const corporationTechnologySeeds = [
   {
@@ -246,7 +269,7 @@ export const corporationTechnologySeeds = [
     name: 'Tannhauser Drive Systems',
     mode: 'campaign-fixed-propulsion-specialist',
     marketShare: 18,
-    unlockedNodeIds: ['node-chemical-thruster-cluster', 'node-basic-capacitor-bank', 'node-vector-plasma-drive'],
+    unlockedNodeIds: ['node-chemical-thruster-cluster', 'node-basic-capacitor-bank', 'node-vector-plasma-drive', 'node-serviceable-fuel-pump', 'node-pulsed-plasma-injector'],
     unlockedTechIds: ['tech-scrap-industrial-basics', 'tech-baseline-power-handling', 'tech-vector-plasma-propulsion'],
     description: 'A propulsion-heavy NPC corporation with superior drive access but dangerous power demands.',
   },
@@ -255,7 +278,7 @@ export const corporationTechnologySeeds = [
     name: 'Vega Hullworks',
     mode: 'campaign-fixed-structure-specialist',
     marketShare: 14,
-    unlockedNodeIds: ['node-riveted-frame-joint', 'node-lattice-frame-joint', 'node-slagged-heat-sink'],
+    unlockedNodeIds: ['node-riveted-frame-joint', 'node-lattice-frame-joint', 'node-slagged-heat-sink', 'node-floating-isolation-mount', 'node-composite-load-web'],
     unlockedTechIds: ['tech-scrap-industrial-basics', 'tech-structural-lattice'],
     description: 'A hull and structure specialist with better frame nodes and more efficient mass distribution.',
   },
@@ -264,7 +287,7 @@ export const corporationTechnologySeeds = [
     name: 'Axiom Reactor Brokerage',
     mode: 'campaign-fixed-reactor-specialist',
     marketShare: 11,
-    unlockedNodeIds: ['node-primitive-reactor-tap', 'node-compact-reactor-spine', 'node-basic-capacitor-bank'],
+    unlockedNodeIds: ['node-primitive-reactor-tap', 'node-compact-reactor-spine', 'node-basic-capacitor-bank', 'node-capillary-reactor-limiter', 'node-superconducting-bus-spine'],
     unlockedTechIds: ['tech-hazardous-reactor-access', 'tech-compact-reactor-spines'],
     description: 'A power-system specialist with reactor access that can eventually support extreme late-game power demand.',
   },
