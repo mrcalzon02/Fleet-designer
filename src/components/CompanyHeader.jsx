@@ -5,7 +5,7 @@ import { formatCredits } from '../game/simulation.js';
 const departmentCards = [
   { title: 'R&D Lab', icon: FlaskConical, note: 'Assign engineers and complete technology projects.' },
   { title: 'Design Studio', icon: Radar, note: 'Saved designs now feed production and licensing.' },
-  { title: 'Production', icon: Factory, note: 'Queue builds, set priority, pause, resume, or cancel.' },
+  { title: 'Production', icon: Factory, note: 'Engineering coverage now affects throughput and defect risk.' },
   { title: 'Supply Chain', icon: PackageSearch, note: 'Materials gate every production run.' },
   { title: 'Market', icon: TrendingUp, note: 'License rival designs or sell your own rights.' },
   { title: 'Vessel Builder', icon: Ship, note: 'Vessel designs are economic products.' },
@@ -13,6 +13,7 @@ const departmentCards = [
 
 export function CompanyHeader({ company, activeWorkUnits, warehouseUsed, onAdvanceCycle, game }) {
   const effectiveBurn = game ? calculateOperatingBurn(game) : company.effectiveBurnRate ?? company.burnRate;
+  const coverage = company.productionEngineeringCoverage;
   return (
     <>
       <section className="hero-panel">
@@ -20,7 +21,7 @@ export function CompanyHeader({ company, activeWorkUnits, warehouseUsed, onAdvan
           <p className="eyebrow">PHASE 1 PLAYABLE MANAGEMENT LOOP</p>
           <h1>Fleet Designer</h1>
           <p className="hero-copy">
-            Factory management now spends finite capacity across the queue by priority. You can pause, resume, cancel, salvage, and reorder production pressure instead of letting every run consume impossible duplicated capacity.
+            Factory management now spends finite capacity across the queue by priority. Engineering coverage now matters: too many active production lines with too few free engineers will slow throughput and drive defect risk upward.
           </p>
           <div className="command-row">
             <button className="primary-command" onClick={onAdvanceCycle} disabled={company.status === 'bankrupt'}>
@@ -37,6 +38,7 @@ export function CompanyHeader({ company, activeWorkUnits, warehouseUsed, onAdvan
           <span>Difficulty: {company.difficultyName ?? 'Normal'}</span>
           <span>Operating Burn: {formatCredits(effectiveBurn)} / cycle</span>
           <span>Factory: {activeWorkUnits} work units queued</span>
+          <span>Engineering Coverage: {coverage ? `${coverage.engineerCount}/${coverage.lineCount} lines // ${coverage.ratio}:1 // ${coverage.label}` : 'not calculated yet'}</span>
           <span>Warehouse: {warehouseUsed}/{company.warehouseCapacity}</span>
         </div>
       </section>
