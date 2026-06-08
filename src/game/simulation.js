@@ -40,10 +40,6 @@ function productionLineCapacity(state) {
   return state.company?.productionLineCapacity ?? 5;
 }
 
-function hasAvailableProductionLine(state) {
-  return activeProductionLineCount(state) < productionLineCapacity(state);
-}
-
 function canAffordBill(inventory, bill, quantity = 1) {
   return Object.entries(bill).every(([key, value]) => (inventory[key] ?? 0) >= value * quantity);
 }
@@ -201,11 +197,6 @@ export function queueProduction(state, designId, quantity = 1, purpose = 'market
   const normalizedQuantity = normalizeQuantity(quantity);
   if (!design) return next;
 
-  if (!hasAvailableProductionLine(next)) {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Production blocked. All ${productionLineCapacity(next)} production lines are already queued or active.`);
-    return next;
-  }
-
   if (warehouseUsed(next) + normalizedQuantity > next.company.warehouseCapacity) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Production blocked. Finished goods warehouse is at capacity.`);
     return next;
@@ -229,7 +220,7 @@ export function queueProduction(state, designId, quantity = 1, purpose = 'market
   }));
 
   next.company.cash -= cashCost;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}. Cash overhead ${currency(cashCost)}. Production lines ${activeProductionLineCount(next)}/${productionLineCapacity(next)}.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${normalizedQuantity} x ${design.name} for ${purpose}. Cash overhead ${currency(cashCost)}. Production load ${activeProductionLineCount(next)} active/queued runs over ${productionLineCapacity(next)} owned lines.`);
   return next;
 }
 
@@ -248,11 +239,6 @@ export function queueContractProduction(state, contractId) {
   const existingRun = next.productionRuns.find((run) => run.contractId === contract.id && !['complete', 'canceled'].includes(run.status));
   if (existingRun) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production already active for ${contract.title}.`);
-    return next;
-  }
-
-  if (!hasAvailableProductionLine(next)) {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. All ${productionLineCapacity(next)} production lines are already queued or active.`);
     return next;
   }
 
@@ -292,7 +278,7 @@ export function queueContractProduction(state, contractId) {
   next.productionRuns.push(run);
   contract.productionRunId = run.id;
   next.company.cash -= cashCost;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Cash overhead ${currency(cashCost)}. Production lines ${activeProductionLineCount(next)}/${productionLineCapacity(next)}. Payout reserved until delivery.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Cash overhead ${currency(cashCost)}. Production load ${activeProductionLineCount(next)} active/queued runs over ${productionLineCapacity(next)} owned lines. Payout reserved until delivery.`);
   return next;
 }
 
@@ -586,7 +572,7 @@ export function advanceCycle(state) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Bankruptcy triggered. Welcome to the intergalactic breadline.`);
   } else {
     const coverage = next.company.productionEngineeringCoverage;
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Operating burn ${currency(operatingBurn)}, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, engineering ${coverage?.engineerCount ?? 0}/${coverage?.lineCount ?? 0} lines (${coverage?.label ?? 'none'}), supply, warehouse, rival watch, and contract sourcing processed.`);
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Cycle advanced. Operating burn ${currency(operatingBurn)}, ${capacityUsed}/${next.company.factoryCapacity} factory capacity allocated, engineering ${coverage?.engineerCount ?? 0}/${coverage?.lineCount ?? 0} active runs over ${coverage?.lineCapacity ?? 5} owned lines (${coverage?.label ?? 'none'}), supply, warehouse, rival watch, and contract sourcing processed.`);
   }
 
   next.eventLog = next.eventLog.slice(0, 18);
