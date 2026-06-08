@@ -1,7 +1,5 @@
-import { templateById } from './layoutTemplates.js';
 import { componentNodeLibrary } from './nodeLibrary.js';
 import { exactPortForNode, portForNode } from './nodePortRules.js';
-import { findLegalRoute } from './pathRouting.js';
 
 function nodeById(nodeId) {
   return componentNodeLibrary.find((node) => node.id === nodeId);
@@ -80,38 +78,6 @@ function distanceBetween(fromCell, toCell) {
   return Math.abs(fromCell.x - toCell.x) + Math.abs(fromCell.y - toCell.y);
 }
 
-function templateAllows(blueprint, x, y) {
-  const template = templateById(blueprint.layoutTemplateId, blueprint.type);
-  return template?.grid?.[y]?.[x] === 'X';
-}
-
-function occupiedMapForBlueprint(blueprint) {
-  return new Map(placedCellsForBlueprint(blueprint).map((cell) => [`${cell.x},${cell.y}`, cell.nodeId]));
-}
-
-function routeForConnection(blueprint, fromAnchor, toAnchor, connection) {
-  return findLegalRoute({
-    template: templateById(blueprint.layoutTemplateId, blueprint.type),
-    occupied: occupiedMapForBlueprint(blueprint),
-    fromCell: fromAnchor,
-    toCell: toAnchor,
-    fromNodeId: connection.from,
-    toNodeId: connection.to,
-  });
-}
-
-function routeObstructions(blueprint, report) {
-  const occupied = occupiedMapForBlueprint(blueprint);
-  const problems = [];
-  for (const cell of report.route ?? []) {
-    const key = `${cell.x},${cell.y}`;
-    if (!templateAllows(blueprint, cell.x, cell.y)) problems.push({ key, kind: 'blocked-cell' });
-    const occupant = occupied.get(key);
-    if (occupant && occupant !== report.from && occupant !== report.to) problems.push({ key, kind: 'foreign-node', occupant });
-  }
-  return problems;
-}
-
 function sideMismatch(fromAnchor, toAnchor) {
   if (!fromAnchor || !toAnchor) return false;
   const horizontal = Math.abs(fromAnchor.x - toAnchor.x) >= Math.abs(fromAnchor.y - toAnchor.y);
@@ -119,6 +85,31 @@ function sideMismatch(fromAnchor, toAnchor) {
   if (horizontal && fromAnchor.x > toAnchor.x) return fromAnchor.side !== 'west' || toAnchor.side !== 'east';
   if (!horizontal && fromAnchor.y <= toAnchor.y) return fromAnchor.side !== 'south' || toAnchor.side !== 'north';
   return fromAnchor.side !== 'north' || toAnchor.side !== 'south';
+}
+
+function connectionEndpointKey(anchor) {
+  if (!anchor) return null;
+  return `${anchor.x},${anchor.y}`;
+}
+
+function countEndpointCongestion(reports) {
+  const endpointUse = new Map();
+  for (const report of reports) {
+    for (const anchor of [report.fromAnchor, report.toAnchor]) {
+      const key = connectionEndpointKey(anchor);
+      if (!key) continue;
+      endpointUse.set(key, (endpointUse.get(key) ?? 0) + 1);
+    }
+  }
+
+  const congestedEndpoints = [...endpointUse.entries()].filter(([, count]) => count > 1);
+  const congestionPenalty = congestedEndpoints.reduce((sum, [, count]) => sum + count - 1, 0);
+
+  return {
+    endpointUse: [...endpointUse.entries()].map(([key, count]) => ({ key, count })),
+    congestedEndpoints: congestedEndpoints.map(([key, count]) => ({ key, count })),
+    congestionPenalty,
+  };
 }
 
 export function classifyConnectionDistance(distance) {
@@ -152,24 +143,11 @@ function addPenalty(summary, amount) {
   summary.cost += amount;
 }
 
-function addCongestion(summary, reports) {
-  const routeUse = new Map();
-  for (const report of reports) {
-    for (const cell of report.route ?? []) {
-      const key = `${cell.x},${cell.y}`;
-      routeUse.set(key, (routeUse.get(key) ?? 0) + 1);
-    }
-  }
-
-  const congestedCells = [...routeUse.entries()].filter(([, count]) => count > 1);
-  const congestionPenalty = congestedCells.reduce((sum, [, count]) => sum + count - 1, 0);
-  addPenalty(summary, congestionPenalty);
-
-  return {
-    routeUse: [...routeUse.entries()].map(([key, count]) => ({ key, count })),
-    congestedCells: congestedCells.map(([key, count]) => ({ key, count })),
-    congestionPenalty,
-  };
+function connectionIssuePenalty(report) {
+  let penalty = 0;
+  if (report.distance === null) penalty += 4;
+  if (report.sideMismatch) penalty += 2;
+  return penalty;
 }
 
 export function calculateConnectionMetrics(blueprint) {
@@ -186,18 +164,37 @@ export function calculateConnectionMetrics(blueprint) {
     const distance = distanceBetween(fromAnchor, toAnchor);
     const classification = classifyConnectionDistance(distance);
     const modifier = modifiersForClass(classification);
-    const routed = routeForConnection(blueprint, fromAnchor, toAnchor, connection);
-    const report = { ...connection, distance, classification, modifier, route: routed.route, routeMode: routed.mode, routeFound: routed.found, fromCell: fromAnchor, toCell: toAnchor, fromAnchor, toAnchor };
-    report.obstructions = routeObstructions(blueprint, report);
+    const report = {
+      ...connection,
+      distance,
+      classification,
+      modifier,
+      route: [],
+      routeMode: 'none-logical-chain-only',
+      routeFound: true,
+      fromCell: fromAnchor,
+      toCell: toAnchor,
+      fromAnchor,
+      toAnchor,
+    };
     report.sideMismatch = sideMismatch(fromAnchor, toAnchor);
-    if (!routed.found) issues.push(`${connection.from}->${connection.to}: no clean legal route`);
     if (report.sideMismatch) issues.push(`${connection.from}->${connection.to}: port side mismatch`);
     addModifier(summary, modifier);
-    addPenalty(summary, report.obstructions.length + (report.sideMismatch ? 2 : 0) + (!routed.found ? 3 : 0));
+    addPenalty(summary, connectionIssuePenalty(report));
     if (fromAnchor) portAnchors.push({ ...fromAnchor, role: 'output', nodeId: connection.from });
     if (toAnchor) portAnchors.push({ ...toAnchor, role: 'input', nodeId: connection.to });
     return report;
   });
-  const congestion = addCongestion(summary, reports);
-  return { reports, summary, congestion, portAnchors, issues };
+
+  const congestion = countEndpointCongestion(reports);
+  addPenalty(summary, congestion.congestionPenalty);
+
+  return {
+    reports,
+    summary,
+    congestion,
+    portAnchors,
+    issues,
+    note: 'Connection metrics are logical chain distance metrics. Components and vehicles do not use routed physical paths.',
+  };
 }
