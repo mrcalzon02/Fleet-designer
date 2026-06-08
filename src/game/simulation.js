@@ -168,6 +168,51 @@ function calculateContractPayout(contract, lot, quantity) {
   return lot.qaResult === 'defective' ? Math.round(gross * 0.72) : gross;
 }
 
+function lotMatchesContractPromise(lot, contract, design) {
+  if (!lot || !contract || !design) return false;
+  if (lot.contractId !== contract.id) return false;
+  if (lot.status !== 'reserved-contract') return false;
+  if ((lot.availableQuantity ?? 0) <= 0) return false;
+  if (lot.designId !== contract.assignedDesignId) return false;
+  if (lot.designId !== design.id) return false;
+  if (lot.type !== contract.requiredType) return false;
+  if (lot.type !== design.type) return false;
+  return true;
+}
+
+function promisedContractLots(next, contract, design) {
+  return next.finishedGoods.filter((lot) => lotMatchesContractPromise(lot, contract, design));
+}
+
+function promisedReservedStock(next, contract, design) {
+  return promisedContractLots(next, contract, design).reduce((sum, lot) => sum + (lot.availableQuantity ?? 0), 0);
+}
+
+function verifiedDeliveredQuantity(contract) {
+  return (contract.deliveryManifest ?? [])
+    .filter((entry) => (
+      entry.contractId === contract.id
+      && entry.designId === contract.assignedDesignId
+      && entry.type === contract.requiredType
+    ))
+    .reduce((sum, entry) => sum + (entry.quantity ?? 0), 0);
+}
+
+function recordVerifiedDelivery(contract, lot, quantity, cycle) {
+  contract.deliveryManifest = contract.deliveryManifest ?? [];
+  contract.deliveryManifest.push({
+    cycle,
+    contractId: contract.id,
+    lotId: lot.id,
+    sourceRunId: lot.sourceRunId,
+    designId: lot.designId,
+    designName: lot.designName,
+    type: lot.type,
+    quantity,
+    qaResult: lot.qaResult,
+  });
+}
+
 export function acceptContract(state, contractId, designId) {
   const next = clone(state);
   const contract = next.contracts.find((item) => item.id === contractId);
@@ -185,9 +230,13 @@ export function acceptContract(state, contractId, designId) {
   contract.productionRunId = null;
   contract.stockLotId = null;
   contract.deliveredQuantity = 0;
+  contract.verifiedDeliveredQuantity = 0;
   contract.earnedReward = 0;
+  contract.deliveryManifest = [];
+  contract.promisedDesignName = design.name;
+  contract.promisedDesignType = design.type;
   contract.acceptedDeadline = contract.effectiveDeadline ?? contract.deadline;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Accepted ${contract.title} for ${contract.client}. Production still must be queued.${contract.contestedBy ? ` Rival pressure from ${contract.contestedBy} remains on the clock.` : ''}`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Accepted ${contract.title} for ${contract.client}. Promised goods locked: ${contract.quantity} x ${design.name} (${design.type}). Production still must be queued.${contract.contestedBy ? ` Rival pressure from ${contract.contestedBy} remains on the clock.` : ''}`);
   return next;
 }
 
@@ -235,20 +284,23 @@ export function queueContractProduction(state, contractId) {
     return next;
   }
 
-  const remainingQuantity = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
+  if (!designMeetsContractPressure(design, contract)) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production blocked. ${design.name} no longer satisfies ${contract.title}.`);
+    return next;
+  }
+
+  const verifiedDelivered = verifiedDeliveredQuantity(contract);
+  const remainingQuantity = Math.max(0, contract.quantity - verifiedDelivered);
   const existingRun = next.productionRuns.find((run) => run.contractId === contract.id && !['complete', 'canceled'].includes(run.status));
   if (existingRun) {
     next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract production already active for ${contract.title}.`);
     return next;
   }
 
-  const reservedStock = next.finishedGoods
-    .filter((lot) => lot.contractId === contract.id && lot.status === 'reserved-contract')
-    .reduce((sum, lot) => sum + lot.availableQuantity, 0);
-
+  const reservedStock = promisedReservedStock(next, contract, design);
   const quantityToBuild = Math.max(0, remainingQuantity - reservedStock);
   if (quantityToBuild <= 0) {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Contract stock already covers remaining delivery for ${contract.title}.`);
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Promised contract stock already covers remaining delivery for ${contract.title}.`);
     return next;
   }
 
@@ -278,7 +330,7 @@ export function queueContractProduction(state, contractId) {
   next.productionRuns.push(run);
   contract.productionRunId = run.id;
   next.company.cash -= cashCost;
-  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Cash overhead ${currency(cashCost)}. Production load ${activeProductionLineCount(next)} active/queued runs over ${productionLineCapacity(next)} owned lines. Payout reserved until delivery.`);
+  next.eventLog.unshift(`Cycle ${next.company.cycle}: Queued ${quantityToBuild} x ${design.name} for ${contract.title}. Cash overhead ${currency(cashCost)}. Production load ${activeProductionLineCount(next)} active/queued runs over ${productionLineCapacity(next)} owned lines. Payout reserved until verified delivery.`);
   return next;
 }
 
@@ -409,25 +461,34 @@ export function deliverContractStock(state, contractId, quantity = 1) {
   const contract = next.contracts.find((item) => item.id === contractId);
   if (!contract || contract.status !== 'accepted') return next;
 
-  const lot = next.finishedGoods.find((item) => (
-    item.contractId === contract.id
-    && item.status === 'reserved-contract'
-    && item.availableQuantity > 0
-  ));
-
-  if (!lot) {
-    next.eventLog.unshift(`Cycle ${next.company.cycle}: Delivery blocked. No finished contract stock ready for ${contract.title}.`);
+  const design = next.designs.find((item) => item.id === contract.assignedDesignId);
+  if (!design) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Delivery blocked. No promised design is assigned for ${contract.title}.`);
     return next;
   }
 
-  const remainingContractQuantity = Math.max(0, contract.quantity - (contract.deliveredQuantity ?? 0));
+  const lot = promisedContractLots(next, contract, design)[0];
+  if (!lot) {
+    const mismatchedReserved = next.finishedGoods.find((item) => item.contractId === contract.id && item.status === 'reserved-contract' && item.availableQuantity > 0);
+    const mismatchText = mismatchedReserved ? ` Reserved stock exists, but it does not match promised goods ${design.name} (${contract.requiredType}).` : '';
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Delivery blocked. No verified promised stock ready for ${contract.title}.${mismatchText}`);
+    return next;
+  }
+
+  const verifiedDelivered = verifiedDeliveredQuantity(contract);
+  const remainingContractQuantity = Math.max(0, contract.quantity - verifiedDelivered);
   const deliverQuantity = Math.min(normalizeQuantity(quantity), lot.availableQuantity, remainingContractQuantity);
-  if (deliverQuantity <= 0) return next;
+  if (deliverQuantity <= 0) {
+    next.eventLog.unshift(`Cycle ${next.company.cycle}: Delivery blocked. ${contract.title} already has verified delivery coverage.`);
+    return next;
+  }
 
   const payout = calculateContractPayout(contract, lot, deliverQuantity);
   lot.availableQuantity -= deliverQuantity;
   lot.deliveredQuantity = (lot.deliveredQuantity ?? 0) + deliverQuantity;
-  contract.deliveredQuantity = (contract.deliveredQuantity ?? 0) + deliverQuantity;
+  recordVerifiedDelivery(contract, lot, deliverQuantity, next.company.cycle);
+  contract.verifiedDeliveredQuantity = verifiedDeliveredQuantity(contract);
+  contract.deliveredQuantity = contract.verifiedDeliveredQuantity;
   contract.earnedReward = (contract.earnedReward ?? 0) + payout;
   next.company.cash += payout;
 
@@ -437,7 +498,7 @@ export function deliverContractStock(state, contractId, quantity = 1) {
     lot.deliveredCycle = next.company.cycle;
   }
 
-  if (contract.deliveredQuantity >= contract.quantity) {
+  if (contract.verifiedDeliveredQuantity >= contract.quantity) {
     contract.status = 'fulfilled';
     contract.deliveredCycle = next.company.cycle;
     contract.stockLotId = lot.id;
@@ -452,7 +513,7 @@ export function deliverContractStock(state, contractId, quantity = 1) {
   }
 
   next.eventLog.unshift(
-    `Cycle ${next.company.cycle}: Delivered ${deliverQuantity} x ${lot.designName} for ${contract.title}. ${lot.qaResult === 'defective' ? 'Client accepted at reduced payout.' : 'Delivery accepted.'} Payout ${currency(payout)}.`
+    `Cycle ${next.company.cycle}: Verified delivery ${deliverQuantity} x ${lot.designName} for ${contract.title}. ${lot.qaResult === 'defective' ? 'Client accepted at reduced payout.' : 'Delivery accepted.'} Verified ${contract.verifiedDeliveredQuantity}/${contract.quantity}. Payout ${currency(payout)}.`
   );
   return next;
 }
@@ -486,7 +547,7 @@ function resolveContractDeadlines(next) {
     if (contract.status !== 'accepted') continue;
     const deadline = contract.acceptedDeadline ?? contract.effectiveDeadline ?? contract.deadline;
     if (next.company.cycle > deadline) {
-      const completionRatio = Math.min(1, (contract.deliveredQuantity ?? 0) / contract.quantity);
+      const completionRatio = Math.min(1, verifiedDeliveredQuantity(contract) / contract.quantity);
       const adjustedPenalty = Math.round(contract.penalty * (1 - completionRatio));
       contract.status = 'failed';
       next.company.cash -= adjustedPenalty;
@@ -496,7 +557,7 @@ function resolveContractDeadlines(next) {
       } else {
         next.company.reputation -= adjustedPenalty > 0 ? 5 : 1;
       }
-      next.eventLog.unshift(`Cycle ${next.company.cycle}: Failed ${contract.title}. Delivered ${contract.deliveredQuantity ?? 0}/${contract.quantity}. Deadline C${deadline}. Penalty ${currency(adjustedPenalty)}.`);
+      next.eventLog.unshift(`Cycle ${next.company.cycle}: Failed ${contract.title}. Verified delivered ${verifiedDeliveredQuantity(contract)}/${contract.quantity}. Deadline C${deadline}. Penalty ${currency(adjustedPenalty)}.`);
     }
   }
 }
