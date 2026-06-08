@@ -12,7 +12,8 @@
     "diagnostics": "node scripts/runtime-diagnostics.mjs",
     "repair:electron": "node scripts/repair-electron.mjs",
     "smoke": "npm run diagnostics && npm run build",
-    "desktop": "npm run repair:electron && npm run build && electron .",
+    "desktop:launch": "npm run build && electron .",
+    "desktop": "npm run repair:electron && npm run desktop:launch",
     "dist:win": "npm run repair:electron && npm run build && electron-builder --win portable",
     "dist:win:installer": "npm run repair:electron && npm run build && electron-builder --win nsis"
   },
