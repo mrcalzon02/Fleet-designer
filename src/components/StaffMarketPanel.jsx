@@ -8,21 +8,23 @@ function specialtySummary(staff) {
   return entries.map(([key, value]) => `${key} ${value}`).join(' // ');
 }
 
-function StaffCard({ engineer, project, onReleaseEngineer }) {
-  const severance = Math.round((engineer.salary ?? 60000) / 6);
+function PopulationCard({ staff, assignment, onReleaseEngineer, releaseEnabled = false, poolLabel = 'staff' }) {
+  const severance = Math.round((staff.salary ?? 60000) / 6);
   return (
     <div className="data-card">
-      <strong>{engineer.name}</strong>
-      <small>{engineer.seniority ?? 'staff'} // {engineer.specialty} // skill {engineer.skill} // salary {formatCredits(engineer.salary)}</small>
-      <p>Morale {engineer.morale}. Fatigue {engineer.fatigue}. Assignment: {project?.name ?? 'unassigned'}.</p>
-      <p>Experience: {staffProgressLabel(engineer)}. Completed projects {engineer.completedProjects ?? 0}.</p>
-      <p>Specialty XP: {specialtySummary(engineer)}.</p>
-      {engineer.lastExperienceGain && <p>Last XP: +{engineer.lastExperienceGain.amount} {engineer.lastExperienceGain.discipline} from {engineer.lastExperienceGain.reason}.</p>}
-      {engineer.promotionHistory?.length > 0 && <p>Promotions: {engineer.promotionHistory.map((entry) => `C${entry.cycle} ${entry.from}->${entry.to}`).join(' // ')}.</p>}
-      {engineer.recruitedFrom && <p>Recruited from {engineer.recruitedFrom}.</p>}
-      <button onClick={() => onReleaseEngineer(engineer.id)} disabled={Boolean(engineer.assignedProjectId)} title={engineer.assignedProjectId ? 'Unassign this staffer before release.' : `Severance ${formatCredits(severance)}`}>
-        Release Staff // {formatCredits(severance)}
-      </button>
+      <strong>{staff.name}</strong>
+      <small>{poolLabel} // {staff.seniority ?? 'staff'} // {staff.specialty} // skill {staff.skill} // salary {formatCredits(staff.salary)}</small>
+      <p>Morale {staff.morale}. Fatigue {staff.fatigue}. Assignment: {assignment ?? 'unassigned'}.</p>
+      <p>Experience: {staffProgressLabel(staff)}. Completed projects {staff.completedProjects ?? 0}.</p>
+      <p>Specialty XP: {specialtySummary(staff)}.</p>
+      {staff.lastExperienceGain && <p>Last XP: +{staff.lastExperienceGain.amount} {staff.lastExperienceGain.discipline} from {staff.lastExperienceGain.reason}.</p>}
+      {staff.promotionHistory?.length > 0 && <p>Promotions: {staff.promotionHistory.map((entry) => `C${entry.cycle} ${entry.from}->${entry.to}`).join(' // ')}.</p>}
+      {staff.recruitedFrom && <p>Recruited from {staff.recruitedFrom}.</p>}
+      {releaseEnabled && (
+        <button onClick={() => onReleaseEngineer(staff.id)} title={`Severance ${formatCredits(severance)}`}>
+          Release Engineer // {formatCredits(severance)}
+        </button>
+      )}
     </div>
   );
 }
@@ -58,13 +60,17 @@ export function StaffMarketPanel({ game, onHireApplicant, onReleaseEngineer, onR
   const applicants = game.staffMarket?.applicants ?? [];
   const marketNote = game.staffMarket?.marketNote ?? 'No staff market scan has completed yet.';
   const rivalCompanies = game.rivalCompanies ?? [];
+  const researchers = game.researchers ?? [];
+  const engineers = game.engineers ?? [];
+  const activeLineCount = game.productionRuns.filter((run) => ['queued', 'active'].includes(run.status)).length;
+  const productionLineCapacity = game.company.productionLineCapacity ?? 5;
 
   return (
     <section className="two-column">
       <article className="console-panel">
         <div className="panel-heading">
           <span>Space LinkedIn Staff Market</span>
-          <small>thin labor pool // rival competition</small>
+          <small>future tabs: researchers / engineers</small>
         </div>
         <p>{marketNote}</p>
         <div className="stack-list">
@@ -77,14 +83,27 @@ export function StaffMarketPanel({ game, onHireApplicant, onReleaseEngineer, onR
 
       <article className="console-panel">
         <div className="panel-heading">
-          <span>Company Staff Control</span>
-          <small>salary, morale, assignment, growth, release</small>
+          <span>Researchers</span>
+          <small>{researchers.length} R&D staff // separate population pool</small>
         </div>
         <div className="stack-list">
-          {game.engineers.map((engineer) => {
-            const project = game.research.find((item) => item.id === engineer.assignedProjectId);
-            return <StaffCard engineer={engineer} project={project} onReleaseEngineer={onReleaseEngineer} key={engineer.id} />;
+          {researchers.map((researcher) => {
+            const project = game.research.find((item) => item.id === researcher.assignedProjectId);
+            return <PopulationCard staff={researcher} assignment={project?.name} poolLabel="researcher" key={researcher.id} />;
           })}
+        </div>
+      </article>
+
+      <article className="console-panel">
+        <div className="panel-heading">
+          <span>Engineers</span>
+          <small>{engineers.length} production staff // {activeLineCount}/{productionLineCapacity} lines</small>
+        </div>
+        <p>At full factory load, 10 engineers over 5 lines gives the intended baseline of 2 engineers per production line.</p>
+        <div className="stack-list">
+          {engineers.map((engineer) => (
+            <PopulationCard staff={engineer} assignment="production engineering pool" onReleaseEngineer={onReleaseEngineer} releaseEnabled poolLabel="engineer" key={engineer.id} />
+          ))}
         </div>
       </article>
 
@@ -103,13 +122,12 @@ export function StaffMarketPanel({ game, onHireApplicant, onReleaseEngineer, onR
 
       <article className="console-panel">
         <div className="panel-heading">
-          <span>Labor Market Notes</span>
-          <small>scarcity and growth model</small>
+          <span>Population Market Notes</span>
+          <small>separate researchers and engineers</small>
         </div>
-        <p>The staff market is intentionally thin. Loose applicants appear roughly every dozen cycles, remain briefly, and can be recruited by rivals before the player acts.</p>
-        <p>Staff now gain experience from research cycles and completed projects. Promotions raise skill, salary, and morale.</p>
+        <p>Researchers and engineers are separate population pools. Researchers drive R&D. Engineers cover factory production lines, throughput, and defect risk.</p>
+        <p>The staff market still needs its next split: applicant generation should create researcher candidates and engineer candidates in separate tabs.</p>
         <p>Rival staff can be recruited if the compensation package is high enough. Loyalty and rival market share make those packages expensive.</p>
-        <p>Releasing staff requires severance and assigned staff must be removed from projects before release.</p>
       </article>
     </section>
   );
