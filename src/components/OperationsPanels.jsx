@@ -1,12 +1,13 @@
 import { Scale } from 'lucide-react';
 import { formatCredits } from '../game/simulation.js';
+import { staffProgressLabel } from '../game/staffGrowth.js';
 
-function assignedEngineers(engineers, projectId) {
-  return engineers.filter((engineer) => engineer.assignedProjectId === projectId);
+function assignedResearchers(researchers, projectId) {
+  return researchers.filter((researcher) => researcher.assignedProjectId === projectId);
 }
 
-export function OperationsPanels({ research, engineers, marketListings, eventLog, companyName, onBuyLicense, onAssignEngineer, onUnassignEngineer }) {
-  const unassignedEngineers = engineers.filter((engineer) => !engineer.assignedProjectId);
+export function OperationsPanels({ research, researchers, marketListings, eventLog, companyName, onBuyLicense, onAssignResearcher, onUnassignResearcher }) {
+  const unassignedResearchers = researchers.filter((researcher) => !researcher.assignedProjectId);
 
   return (
     <>
@@ -14,27 +15,27 @@ export function OperationsPanels({ research, engineers, marketListings, eventLog
         <article className="console-panel">
           <div className="panel-heading">
             <span>R&D Dashboard</span>
-            <small>engineer assignment</small>
+            <small>researcher assignment</small>
           </div>
           <div className="stack-list">
             {research.map((project) => {
-              const staff = assignedEngineers(engineers, project.id);
+              const staff = assignedResearchers(researchers, project.id);
               return (
                 <div className={`data-card ${project.status} ${project.stalled ? 'paused' : ''}`} key={project.id}>
                   <strong>{project.name}</strong>
                   <small>{project.discipline} // {project.status} // +{project.lastProgress ?? 0}/cycle</small>
                   <progress max={project.required} value={project.progress} />
                   <p>{project.effect}</p>
-                  <p>Progress {project.progress}/{project.required}. Staffed by {staff.length ? staff.map((engineer) => engineer.name).join(', ') : 'no engineers'}.</p>
+                  <p>Progress {project.progress}/{project.required}. Staffed by {staff.length ? staff.map((researcher) => researcher.name).join(', ') : 'no researchers'}.</p>
                   <div className="button-row segmented-actions">
-                    {staff.map((engineer) => (
-                      <button key={engineer.id} onClick={() => onUnassignEngineer(engineer.id)}>
-                        Remove {engineer.name}
+                    {staff.map((researcher) => (
+                      <button key={researcher.id} onClick={() => onUnassignResearcher(researcher.id)}>
+                        Remove {researcher.name}
                       </button>
                     ))}
-                    {project.status !== 'complete' && unassignedEngineers.map((engineer) => (
-                      <button key={engineer.id} onClick={() => onAssignEngineer(engineer.id, project.id)}>
-                        Assign {engineer.name}
+                    {project.status !== 'complete' && unassignedResearchers.map((researcher) => (
+                      <button key={researcher.id} onClick={() => onAssignResearcher(researcher.id, project.id)}>
+                        Assign {researcher.name}
                       </button>
                     ))}
                   </div>
@@ -46,19 +47,20 @@ export function OperationsPanels({ research, engineers, marketListings, eventLog
 
         <article className="console-panel">
           <div className="panel-heading">
-            <span>Engineering Roster</span>
-            <small>skill, morale, fatigue</small>
+            <span>Researcher Roster</span>
+            <small>R&D-only population pool</small>
           </div>
           <div className="stack-list">
-            {engineers.map((engineer) => {
-              const project = research.find((item) => item.id === engineer.assignedProjectId);
+            {researchers.map((researcher) => {
+              const project = research.find((item) => item.id === researcher.assignedProjectId);
               return (
-                <div className="data-card" key={engineer.id}>
-                  <strong>{engineer.name}</strong>
-                  <small>{engineer.specialty} // skill {engineer.skill} // {formatCredits(engineer.salary)} salary</small>
-                  <p>Morale {engineer.morale}. Fatigue {engineer.fatigue}. Assignment: {project?.name ?? 'unassigned'}.</p>
-                  {engineer.assignedProjectId && (
-                    <button onClick={() => onUnassignEngineer(engineer.id)}>Unassign</button>
+                <div className="data-card" key={researcher.id}>
+                  <strong>{researcher.name}</strong>
+                  <small>{researcher.seniority ?? 'researcher'} // {researcher.specialty} // skill {researcher.skill} // {formatCredits(researcher.salary)} salary</small>
+                  <p>Morale {researcher.morale}. Fatigue {researcher.fatigue}. Assignment: {project?.name ?? 'unassigned'}.</p>
+                  <p>Experience: {staffProgressLabel(researcher)}. Completed projects {researcher.completedProjects ?? 0}.</p>
+                  {researcher.assignedProjectId && (
+                    <button onClick={() => onUnassignResearcher(researcher.id)}>Unassign</button>
                   )}
                 </div>
               );
@@ -79,7 +81,7 @@ export function OperationsPanels({ research, engineers, marketListings, eventLog
                 <strong>{listing.designName}</strong>
                 <small>{listing.seller} // {listing.type}</small>
                 <p>License price {formatCredits(listing.price)}.</p>
-                <button onClick={() => onBuyLicense(listing.id)} disabled={listing.seller === companyName}>
+                <button onClick={() => onBuyLicense(listing.id)} disabled={listing.seller === companyName || !listing.license}>
                   Buy License
                 </button>
               </div>
@@ -104,10 +106,10 @@ export function OperationsPanels({ research, engineers, marketListings, eventLog
           <small>phase 2 candidates</small>
         </div>
         <div className="tag-row large-tags">
-          <span><Scale size={16} /> R&D staffing now affects research speed; next step is supplier contracts and material pricing.</span>
-          <span>Engineer hiring, training, burnout, and specialization depth can come later.</span>
-          <span>Supply should move from automatic restocking into supplier contracts and commodity pricing.</span>
-          <span>Design editor output should create new real designs rather than fixed starter designs.</span>
+          <span><Scale size={16} /> Researchers and engineers are now separate population pools.</span>
+          <span>Researchers drive R&D progress and technology unlocks.</span>
+          <span>Engineers cover production lines, throughput, and defect risk.</span>
+          <span>Next: split hiring market into researcher and engineer tabs.</span>
         </div>
       </section>
     </>
