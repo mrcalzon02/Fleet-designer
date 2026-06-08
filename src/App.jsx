@@ -4,6 +4,7 @@ import { CampaignPressurePanel } from './components/CampaignPressurePanel.jsx';
 import { ClientRelationsPanel } from './components/ClientRelationsPanel.jsx';
 import { CompanyHeader } from './components/CompanyHeader.jsx';
 import { ContractBoard } from './components/ContractBoard.jsx';
+import { FactoryExpansionPanel } from './components/FactoryExpansionPanel.jsx';
 import { FinancialOverview } from './components/FinancialOverview.jsx';
 import { InventoryWarehousePanels } from './components/InventoryWarehousePanels.jsx';
 import { NodeTechnologyPanel } from './components/NodeTechnologyPanel.jsx';
@@ -12,6 +13,7 @@ import { ProductionPanels } from './components/ProductionPanels.jsx';
 import { StaffMarketPanel } from './components/StaffMarketPanel.jsx';
 import { VehicleAssemblyPanel } from './components/VehicleAssemblyPanel.jsx';
 import { createDesignFromBlueprint } from './game/designSimulation.js';
+import { purchaseFactoryExpansion } from './game/factoryExpansion.js';
 import { initialGameState } from './game/initialState.js';
 import { hireApplicant, processStaffMarket, recruitFromRival, releaseEngineer } from './game/laborMarketSimulation.js';
 import { assignResearcherToProject, unassignResearcher } from './game/researchSimulation.js';
@@ -117,6 +119,11 @@ function App() {
       />
 
       <ClientRelationsPanel company={game.company} />
+
+      <FactoryExpansionPanel
+        game={game}
+        onPurchaseExpansion={(optionId) => applyAction((state) => purchaseFactoryExpansion(state, optionId))}
+      />
 
       <StaffMarketPanel
         game={game}
