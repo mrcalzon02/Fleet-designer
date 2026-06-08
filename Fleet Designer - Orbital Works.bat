@@ -26,7 +26,16 @@ if errorlevel 1 (
 )
 
 echo.
-echo Diagnostics passed. Building and launching desktop shell...
+echo Checking and repairing Electron runtime...
+call npm run repair:electron
+if errorlevel 1 (
+  echo.
+  echo Electron repair failed. Delete node_modules and package-lock.json, then run npm install again if this continues.
+  goto fail
+)
+
+echo.
+echo Diagnostics and Electron runtime passed. Building and launching desktop shell...
 call npm run desktop
 if errorlevel 1 goto fail
 
@@ -35,5 +44,10 @@ exit /b 0
 :fail
 echo.
 echo Fleet Designer failed to start. Check the error above.
+echo Suggested hard reset if Electron is corrupted:
+echo   rmdir /s /q node_modules
+echo   del package-lock.json
+echo   npm install
+echo   npm run desktop
 pause
 exit /b 1
