@@ -280,6 +280,39 @@ h1 {
 .data-card.delivered { border-color: rgba(0, 255, 209, 0.65); }
 .data-card.failed { border-color: rgba(255, 59, 59, 0.75); }
 
+.profile-card {
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+}
+.profile-card-body {
+  display: grid;
+  gap: 9px;
+}
+.profile-portrait {
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(255, 184, 0, 0.42);
+  background-color: rgba(5, 7, 10, 0.95);
+  background-image: var(--portrait-atlas), linear-gradient(135deg, rgba(0, 255, 209, 0.16), rgba(255, 184, 0, 0.1));
+  background-repeat: no-repeat;
+  background-position: var(--portrait-x) var(--portrait-y), center;
+  background-size: 800% 800%, cover;
+  image-rendering: pixelated;
+  box-shadow: inset 0 0 0 1px rgba(0, 255, 209, 0.15), 0 0 18px rgba(0, 255, 209, 0.09);
+  position: relative;
+  overflow: hidden;
+}
+.profile-portrait span {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 1px 3px;
+  background: rgba(5, 7, 10, 0.76);
+  color: #ffb800;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.54rem;
+}
+
 .template-grid {
   display: inline-grid;
   gap: 2px;
@@ -391,4 +424,5 @@ h1 {
   .supply-lane { grid-template-columns: 1fr; }
   .button-row button, .quantity-control { width: 100%; }
   .quantity-control { grid-template-columns: 1fr 92px; }
+  .profile-card { grid-template-columns: 1fr; }
 }
